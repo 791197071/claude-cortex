@@ -266,21 +266,24 @@ function memFileHtml(f) {
   const safePath = escHtml(f.path);
   const safeName = escHtml(f.name);
   return `
-  <div class="mem-file" id="memf-${safeId}">
+  <div class="mem-file" id="memf-${safeId}" data-path="${safePath}" data-name="${safeName}">
     <div class="mem-file-name">${safeName}</div>
     <div class="mem-file-body">
       ${memTypeBadge(f.mem_type)}
       <div class="mem-path" style="font-size:10.5px;word-break:break-all">${safePath}</div>
       <div class="mem-file-summary">${escHtml(f.summary) || '（空文件）'}</div>
       <div class="mem-file-actions">
-        <button class="btn btn-ghost" onclick="openMemFileEdit('${safeId}','${safeName}','${safePath}')">编辑</button>
-        <button class="btn btn-danger" onclick="doDeleteMemFile('${safePath}','memf-${safeId}')">删除</button>
+        <button class="btn btn-ghost" onclick="openMemFileEdit(this)">编辑</button>
+        <button class="btn btn-danger" onclick="doDeleteMemFile(this)">删除</button>
       </div>
     </div>
   </div>`;
 }
 
-window.openMemFileEdit = async function(id, name, path) {
+window.openMemFileEdit = async function(btn) {
+  const el = btn.closest('.mem-file');
+  const path = el.dataset.path;
+  const name = el.dataset.name;
   const content = await invoke('read_file', { path }).catch(e => { alert(e); return ''; });
   _editSaveCallback = async (newContent) => {
     await invoke('write_file', { path, content: newContent }).catch(e => alert(e));
@@ -291,11 +294,14 @@ window.openMemFileEdit = async function(id, name, path) {
   document.getElementById('edit-modal').classList.add('show');
 };
 
-window.doDeleteMemFile = function(path, elId) {
+window.doDeleteMemFile = function(btn) {
+  const el = btn.closest('.mem-file');
+  const path = el.dataset.path;
+  const elId = el.id;
   showConfirm('确认删除', '删除此记忆文件？此操作不可撤销。', '确认删除', async () => {
     await invoke('delete_file', { path }).catch(e => alert(e));
-    const el = document.getElementById(elId);
-    if (el) { el.classList.add('deleted'); setTimeout(() => el.remove(), 300); }
+    const target = document.getElementById(elId);
+    if (target) { target.classList.add('deleted'); setTimeout(() => target.remove(), 300); }
     toast('已删除', 'success');
   });
 };
@@ -348,18 +354,21 @@ async function loadSessions() {
         <div class="session-token-label">tokens</div>
       </div>
       <div style="margin-left:8px;flex-shrink:0">
-        <button class="btn btn-danger btn-sm" onclick="doDeleteSession('${safePath}','sess-${safeId}',event)">删除</button>
+        <button class="btn btn-danger btn-sm" onclick="doDeleteSession(this,event)">删除</button>
       </div>
     </div>`;
   }).join('');
 }
 
-window.doDeleteSession = function(path, elId, e) {
+window.doDeleteSession = function(btn, e) {
   if (e) { e.stopPropagation(); e.preventDefault(); }
+  const el = btn.closest('.session-item');
+  const path = el.dataset.path;
+  const elId = el.id;
   showConfirm('确认删除', '删除此会话记录？此操作不可撤销。', '确认删除', async () => {
     await invoke('delete_session', { path }).catch(err => { alert(err); return; });
-    const el = document.getElementById(elId);
-    if (el) { el.classList.add('deleted'); setTimeout(() => el.remove(), 300); }
+    const target = document.getElementById(elId);
+    if (target) { target.classList.add('deleted'); setTimeout(() => target.remove(), 300); }
     toast('会话已删除', 'success');
   });
 };
