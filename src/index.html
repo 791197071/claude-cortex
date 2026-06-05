@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Claude Cortex</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f7f8fc;--surface:#fff;--surface2:#f0f2f8;--surface3:#e8ecf5;
+  --text:#2c2f42;--text2:#6b7280;--text3:#b0b8cc;
+  --border:rgba(100,110,160,0.1);--border2:rgba(100,110,160,0.18);
+  --accent:#6c8ef5;--accent-soft:#eef1fd;
+  --green:#52c79b;--green-soft:#edfaf4;
+  --blue:#60a5fa;--blue-soft:#eff6ff;
+  --amber:#f9a825;--amber-soft:#fffbeb;
+  --purple:#a78bfa;--purple-soft:#f5f3ff;
+  --red:#f87171;--red-soft:#fff1f1;
+  --teal:#2dd4bf;--teal-soft:#f0fdfb;
+  --sidebar-w:210px;--titlebar-h:52px;
+  --radius:14px;--radius-sm:9px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased}
+
+/* ── Titlebar ── */
+.titlebar{position:fixed;top:0;left:0;right:0;z-index:100;height:var(--titlebar-h);background:rgba(247,248,252,0.92);backdrop-filter:blur(20px);border-bottom:0.5px solid var(--border2);display:flex;align-items:center;padding:0 20px;gap:14px}
+.logo{display:flex;align-items:center;gap:9px}
+.logo-mark{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#6c8ef5,#a78bfa);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;color:#fff}
+.logo-text{font-size:15px;font-weight:600;letter-spacing:-.02em}
+.refresh-btn{height:32px;padding:0 13px;border:0.5px solid var(--border2);border-radius:8px;background:var(--surface);color:var(--text2);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:5px;transition:all .18s}
+.refresh-btn:hover{background:var(--surface2);color:var(--text)}
+
+/* ── Layout ── */
+.app-layout{display:flex;margin-top:var(--titlebar-h);height:calc(100vh - var(--titlebar-h));overflow:hidden}
+.sidebar{width:var(--sidebar-w);flex-shrink:0;position:fixed;top:var(--titlebar-h);left:0;bottom:0;background:var(--surface);border-right:0.5px solid var(--border2);overflow-y:auto;padding:16px 10px}
+.main-content{margin-left:var(--sidebar-w);flex:1;padding:28px 28px;min-width:0;overflow-y:auto;height:100%}
+.page{display:none}.page.active{display:block}
+
+/* ── Sidebar nav ── */
+.sidebar-group{margin-bottom:20px}
+.sidebar-group-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);padding:0 8px;margin-bottom:4px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:9px;cursor:pointer;transition:all .15s;color:var(--text2);font-size:13px;font-weight:500;border:none;background:transparent;width:100%;text-align:left}
+.nav-item:hover{background:var(--surface2);color:var(--text)}
+.nav-item.active{background:var(--accent-soft);color:var(--accent)}
+.nav-icon{font-size:14px;width:18px;text-align:center;flex-shrink:0}
+.nav-badge{margin-left:auto;font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;background:var(--surface3);color:var(--text3)}
+.nav-item.active .nav-badge{background:rgba(108,142,245,0.15);color:var(--accent)}
+
+/* ── Stats ── */
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:28px}
+.stat{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:16px 18px}
+.stat-val{font-size:24px;font-weight:600;letter-spacing:-.03em;margin-bottom:3px}
+.stat-label{font-size:11px;color:var(--text2)}
+.c-accent{color:var(--accent)}.c-green{color:var(--green)}.c-purple{color:var(--purple)}.c-amber{color:var(--amber)}.c-red{color:var(--red)}.c-teal{color:var(--teal)}.c-blue{color:var(--blue)}
+
+/* ── Section ── */
+.section{margin-bottom:32px}
+.section-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.section-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text3)}
+.pill{font-size:10px;font-weight:500;padding:2px 8px;border-radius:20px;background:var(--surface2);border:0.5px solid var(--border2);color:var(--text2);font-family:'SF Mono',Menlo,monospace}
+.section-action{margin-left:auto}
+
+/* ── Cards ── */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:18px;transition:border-color .18s,transform .18s,box-shadow .18s;position:relative;display:flex;flex-direction:column}
+.card.clickable{cursor:pointer}
+.card.clickable:hover{border-color:rgba(108,142,245,0.35);transform:translateY(-2px);box-shadow:0 6px 24px rgba(108,142,245,0.1)}
+.card.deleted{opacity:0;transform:scale(0.95);transition:all .3s;pointer-events:none}
+
+/* ── Badges ── */
+.scope-row{display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;letter-spacing:.03em;padding:3px 9px;border-radius:6px}
+.dot{width:5px;height:5px;border-radius:50%}
+.badge-custom{background:var(--green-soft);color:#2a9d74;border:0.5px solid rgba(52,199,123,0.2)}.badge-custom .dot{background:var(--green)}
+.badge-plugin{background:var(--blue-soft);color:#2563eb;border:0.5px solid rgba(96,165,250,0.2)}.badge-plugin .dot{background:var(--blue)}
+.badge-builtin{background:var(--surface2);color:var(--text2);border:0.5px solid var(--border2)}.badge-builtin .dot{background:var(--text3)}
+.badge-memory{background:var(--purple-soft);color:#7c3aed;border:0.5px solid rgba(167,139,250,0.2)}.badge-memory .dot{background:var(--purple)}
+.badge-feedback{background:var(--amber-soft);color:#b45309;border:0.5px solid rgba(249,168,37,0.2)}.badge-feedback .dot{background:var(--amber)}
+.badge-agent{background:var(--teal-soft);color:#0d9488;border:0.5px solid rgba(45,212,191,0.25)}.badge-agent .dot{background:var(--teal)}
+.scope-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:500;padding:2px 8px;border-radius:5px}
+.scope-global{background:var(--teal-soft);color:#0d9488;border:0.5px solid rgba(45,212,191,0.25)}
+.scope-project{background:var(--purple-soft);color:#7c3aed;border:0.5px solid rgba(167,139,250,0.2)}
+.scope-project-name{font-size:9.5px;color:var(--text3);font-family:'SF Mono',Menlo,monospace;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card-name{font-size:14px;font-weight:600;letter-spacing:-.01em;margin-bottom:4px}
+.card-desc{font-size:12px;color:var(--text2);line-height:1.55;margin-bottom:11px}
+.cmds{display:flex;flex-wrap:wrap;gap:4px}
+.cmd{font-size:10px;font-family:'SF Mono',Menlo,monospace;padding:3px 7px;background:var(--surface2);border:0.5px solid var(--border2);border-radius:5px;color:var(--text2)}
+.card-actions{display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:12px;padding-top:12px;border-top:0.5px solid var(--border)}
+.click-hint{font-size:10px;color:var(--text3);margin-top:auto;padding-top:8px;text-align:right}
+
+/* ── Buttons ── */
+.btn{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:500;padding:5px 11px;border-radius:7px;cursor:pointer;border:0.5px solid;transition:all .18s;white-space:nowrap}
+.btn-danger{background:var(--red-soft);color:#dc2626;border-color:rgba(248,113,113,0.25)}.btn-danger:hover{background:#fee2e2;border-color:rgba(248,113,113,0.5)}
+.btn-warning{background:var(--amber-soft);color:#b45309;border-color:rgba(249,168,37,0.25)}.btn-warning:hover{background:#fef3c7;border-color:rgba(249,168,37,0.5)}
+.btn-ghost{background:var(--surface2);color:var(--text2);border-color:var(--border2)}.btn-ghost:hover{background:var(--surface3);color:var(--text)}
+.btn-primary{background:var(--accent-soft);color:var(--accent);border-color:rgba(108,142,245,0.25)}.btn-primary:hover{background:#dde6fd;border-color:rgba(108,142,245,0.5)}
+.btn-success{background:var(--green-soft);color:#2a9d74;border-color:rgba(52,199,123,0.25)}.btn-success:hover{background:#d1fae5}
+.btn-sm{padding:4px 10px;font-size:11px}
+
+/* ── List / Row ── */
+.list{display:flex;flex-direction:column;gap:8px}
+.row{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:16px 18px;display:flex;align-items:center;gap:14px;transition:all .18s}
+.row:hover{border-color:var(--border2)}
+.row.deleted{opacity:0;transform:translateX(20px);transition:all .3s;pointer-events:none}
+.row-icon{width:40px;height:40px;border-radius:11px;background:var(--surface2);border:0.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.row-name{font-size:14px;font-weight:600;margin-bottom:2px}
+.row-desc{font-size:12px;color:var(--text2);margin-bottom:3px}
+.row-path{font-size:10.5px;font-family:'SF Mono',Menlo,monospace;color:var(--text3)}
+.row-tag{flex-shrink:0;font-size:10px;font-weight:500;padding:3px 9px;border-radius:6px;background:var(--surface2);border:0.5px solid var(--border2);color:var(--text2)}
+.row-actions{display:flex;gap:6px;margin-left:auto;flex-shrink:0}
+.row-skills-note{font-size:10.5px;color:var(--text3);margin-top:4px}
+
+/* ── Memory ── */
+.mem-card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:10px}
+.mem-card-head{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:0.5px solid var(--border)}
+.mem-project{font-size:13px;font-weight:600;flex:1}
+.mem-path{font-size:10.5px;font-family:'SF Mono',Menlo,monospace;color:var(--text3);margin-top:2px}
+.mem-size{font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;background:var(--purple-soft);color:#7c3aed;border:0.5px solid rgba(167,139,250,0.2);flex-shrink:0}
+.mem-files{padding:4px 0}
+.mem-file{display:flex;flex-direction:column;gap:0;padding:16px 18px;border-bottom:0.5px solid var(--border);transition:background .15s}
+.mem-file:last-child{border-bottom:none}
+.mem-file:hover{background:var(--surface2)}
+.mem-file.deleted{opacity:0;max-height:0;padding:0;overflow:hidden;transition:all .3s}
+.mem-file-name{font-size:12.5px;font-family:'SF Mono',Menlo,monospace;color:var(--text);font-weight:600;word-break:break-all;margin-bottom:10px}
+.mem-file-body{display:flex;flex-direction:column;gap:7px;align-items:flex-start}
+.mem-file-summary{font-size:12.5px;color:var(--text2);line-height:1.6}
+.mem-file-actions{display:flex;gap:6px;padding-top:4px}
+.mem-proj-tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.mem-proj-tab{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:500;padding:7px 14px;border-radius:9px;border:0.5px solid var(--border2);background:var(--surface2);color:var(--text2);cursor:pointer;transition:all .18s}
+.mem-proj-tab.active{background:var(--purple-soft);color:#7c3aed;border-color:rgba(167,139,250,0.35)}
+.mem-proj-tab:hover:not(.active){background:var(--surface3);color:var(--text)}
+.mem-tab-count{font-size:10px;font-weight:500;padding:2px 7px;border-radius:20px;background:rgba(0,0,0,0.06);color:inherit}
+
+/* ── Cache ── */
+.cache-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.cache-card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:16px;transition:all .18s}
+.cache-card.warn{border-color:rgba(249,168,37,0.2);background:#fffdf8}
+.cache-card.cleared{opacity:.5}
+.cache-size{font-size:22px;font-weight:600;letter-spacing:-.03em;margin-bottom:2px}
+.cache-size.warn{color:var(--amber)}
+.cache-size.cleared-text{font-size:14px;color:var(--green);font-weight:500}
+.cache-path{font-size:10px;font-family:'SF Mono',Menlo,monospace;color:var(--text3);margin-bottom:5px}
+.cache-note{font-size:11px;color:var(--text2)}
+.cache-actions{margin-top:10px}
+.notice{padding:14px 16px;background:var(--accent-soft);border:0.5px solid rgba(108,142,245,0.2);border-radius:var(--radius-sm);font-size:13px;color:var(--text2);line-height:1.65}
+.notice strong{color:var(--accent);font-weight:600}
+.clear-all-bar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);margin-bottom:16px}
+.clear-all-label{font-size:13px;color:var(--text2)}
+.clear-all-label strong{color:var(--text);font-weight:600}
+
+hr{border:none;border-top:0.5px solid var(--border);margin:2rem 0}
+
+/* ── Toggle ── */
+.toggle{position:relative;display:inline-block;width:36px;height:20px;cursor:pointer;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0;position:absolute}
+.toggle-slider{position:absolute;inset:0;background:var(--surface3);border-radius:20px;transition:.2s;border:0.5px solid var(--border2)}
+.toggle input:checked+.toggle-slider{background:var(--accent);border-color:transparent}
+.toggle-slider::after{content:'';position:absolute;width:14px;height:14px;background:#fff;border-radius:50%;top:2px;left:2px;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,0.15)}
+.toggle input:checked+.toggle-slider::after{left:18px}
+
+/* ── Settings ── */
+.settings-block{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:14px}
+.settings-block-head{padding:13px 18px;border-bottom:0.5px solid var(--border);font-size:13px;font-weight:600;color:var(--text)}
+.settings-row{display:flex;align-items:center;padding:13px 18px;border-bottom:0.5px solid var(--border);gap:14px}
+.settings-row:last-child{border-bottom:none}
+.settings-row-body{flex:1}
+.settings-row-name{font-size:13px;font-weight:500;margin-bottom:2px}
+.settings-row-desc{font-size:11.5px;color:var(--text2)}
+.settings-val{font-size:12px;font-family:'SF Mono',Menlo,monospace;color:var(--accent);background:var(--accent-soft);padding:3px 9px;border-radius:6px;border:0.5px solid rgba(108,142,245,0.2)}
+
+/* ── Hooks ── */
+.hook-card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:16px 18px;display:flex;align-items:flex-start;gap:14px;transition:all .18s;margin-bottom:8px}
+.hook-card:hover{border-color:var(--border2)}
+.hook-left{display:flex;flex-direction:column;align-items:center;gap:8px;flex-shrink:0}
+.hook-type-tag{font-size:10px;font-weight:600;padding:3px 9px;border-radius:6px;white-space:nowrap}
+.hook-type-pre{background:var(--amber-soft);color:#b45309;border:0.5px solid rgba(249,168,37,0.25)}
+.hook-type-post{background:var(--green-soft);color:#2a9d74;border:0.5px solid rgba(52,199,123,0.2)}
+.hook-type-stop{background:var(--purple-soft);color:#7c3aed;border:0.5px solid rgba(167,139,250,0.2)}
+.hook-body{flex:1;min-width:0}
+.hook-name{font-size:13px;font-weight:600;margin-bottom:6px}
+.hook-cmd{font-size:11px;font-family:'SF Mono',Menlo,monospace;color:var(--text2);background:var(--surface2);padding:7px 10px;border-radius:7px;margin-bottom:8px;word-break:break-all;border:0.5px solid var(--border)}
+.hook-desc{font-size:12px;color:var(--text2);line-height:1.55}
+.hook-actions{display:flex;gap:6px;margin-top:10px}
+
+/* ── MCP ── */
+.mcp-status{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:500;padding:2px 9px;border-radius:6px}
+.mcp-status.running{background:var(--green-soft);color:#2a9d74;border:0.5px solid rgba(52,199,123,0.2)}
+.mcp-status.stopped{background:var(--surface2);color:var(--text3);border:0.5px solid var(--border2)}
+.status-dot{width:6px;height:6px;border-radius:50%}
+.status-dot.running{background:var(--green)}
+.status-dot.stopped{background:var(--text3)}
+
+/* ── CLAUDE.md ── */
+.claudemd-card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:10px}
+.claudemd-header{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px}
+.claudemd-icon{font-size:24px;flex-shrink:0}
+.claudemd-info{flex:1}
+.claudemd-title{font-size:14px;font-weight:600;margin-bottom:3px}
+.claudemd-path{font-size:10.5px;font-family:'SF Mono',Menlo,monospace;color:var(--text3)}
+.claudemd-size{font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;background:var(--accent-soft);color:var(--accent);border:0.5px solid rgba(108,142,245,0.2);flex-shrink:0}
+.claudemd-preview{font-size:12px;color:var(--text2);line-height:1.65;background:var(--surface2);padding:12px 14px;border-radius:9px;border:0.5px solid var(--border);margin-bottom:12px;max-height:80px;overflow:hidden;position:relative;white-space:pre-wrap}
+.claudemd-preview::after{content:'';position:absolute;bottom:0;left:0;right:0;height:28px;background:linear-gradient(transparent,var(--surface2))}
+.claudemd-actions{display:flex;gap:6px}
+
+/* ── Sessions ── */
+.session-item{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:15px 18px;display:flex;align-items:flex-start;gap:14px;transition:all .18s;margin-bottom:8px;cursor:pointer}
+.session-item:hover{border-color:rgba(108,142,245,0.3);transform:translateY(-1px);box-shadow:0 4px 16px rgba(108,142,245,0.08)}
+.session-icon{width:36px;height:36px;border-radius:10px;background:var(--accent-soft);border:0.5px solid rgba(108,142,245,0.2);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.session-body{flex:1;min-width:0}
+.session-title{font-size:13px;font-weight:600;margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session-meta{display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap}
+.session-project{font-size:10px;font-weight:500;padding:2px 8px;border-radius:5px}
+.session-date{font-size:11px;color:var(--text3)}
+.session-preview{font-size:12px;color:var(--text2);line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.session-tokens{flex-shrink:0;text-align:right}
+.session-token-val{font-size:14px;font-weight:600;color:var(--text);letter-spacing:-.02em}
+.session-token-label{font-size:10px;color:var(--text3)}
+
+/* ── Stats chart ── */
+.chart-wrap{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:20px 22px;margin-bottom:14px}
+.chart-title{font-size:11px;font-weight:600;color:var(--text3);margin-bottom:18px;text-transform:uppercase;letter-spacing:.07em}
+.bar-chart{display:flex;align-items:flex-end;gap:6px}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.bar-area{width:100%;height:100px;display:flex;align-items:flex-end}
+.bar-val{font-size:10px;color:var(--text2);font-weight:500}
+.bar{width:100%;border-radius:5px 5px 0 0;background:linear-gradient(to top,var(--accent),#a78bfa);opacity:.8;transition:height .3s,opacity .18s;min-height:3px}
+.bar:hover{opacity:1}
+.bar-label{font-size:10px;color:var(--text3)}
+.proj-table{width:100%;border-collapse:collapse}
+.proj-table th{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);text-align:left;padding:8px 12px;border-bottom:0.5px solid var(--border)}
+.proj-table td{font-size:12.5px;padding:11px 12px;border-bottom:0.5px solid var(--border);color:var(--text2)}
+.proj-table tr:last-child td{border-bottom:none}
+.proj-table td:first-child{font-family:'SF Mono',Menlo,monospace;font-size:12px;color:var(--text);font-weight:500}
+.progress-wrap{display:flex;align-items:center;gap:8px}
+.progress-bg{flex:1;height:5px;background:var(--surface3);border-radius:5px;overflow:hidden}
+.progress-fill{height:100%;border-radius:5px}
+.progress-pct{font-size:11px;color:var(--text3);flex-shrink:0;width:28px;text-align:right}
+
+/* ── Agent model tag ── */
+.model-tag{font-size:10px;font-family:'SF Mono',Menlo,monospace;padding:2px 7px;background:var(--teal-soft);color:#0d9488;border:0.5px solid rgba(45,212,191,0.25);border-radius:5px}
+
+/* ── Form ── */
+.form-group{display:flex;flex-direction:column;gap:5px}
+.form-label{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.05em}
+.form-input{padding:9px 12px;border:0.5px solid var(--border2);border-radius:9px;font-size:13px;color:var(--text);background:var(--surface2);outline:none;transition:border-color .18s;font-family:inherit}
+.form-input:focus{border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 3px rgba(108,142,245,0.08)}
+.form-select{appearance:none;cursor:pointer}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--text);color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;opacity:0;transition:all .25s;pointer-events:none;z-index:999;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.success{background:#16a34a}
+.toast.danger{background:#dc2626}
+
+/* ── Confirm modal ── */
+.confirm-bg{display:none;position:fixed;inset:0;background:rgba(44,47,66,0.3);backdrop-filter:blur(6px);z-index:300;align-items:center;justify-content:center}
+.confirm-bg.show{display:flex}
+.confirm-box{background:var(--surface);border:0.5px solid var(--border2);border-radius:16px;padding:24px;width:360px;box-shadow:0 16px 48px rgba(44,47,66,0.15)}
+.confirm-title{font-size:15px;font-weight:600;margin-bottom:8px}
+.confirm-msg{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:20px}
+.confirm-actions{display:flex;gap:8px;justify-content:flex-end}
+
+/* ── Edit modal ── */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(44,47,66,0.3);backdrop-filter:blur(8px);z-index:200;align-items:center;justify-content:center}
+.modal-bg.show{display:flex}
+.modal{background:var(--surface);border:0.5px solid var(--border2);border-radius:18px;width:660px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(44,47,66,0.18)}
+.modal-head{padding:18px 20px 14px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;gap:10px}
+.modal-head h3{font-size:15px;font-weight:600;flex:1}
+.modal-close{width:26px;height:26px;border-radius:50%;border:0.5px solid var(--border2);background:var(--surface2);color:var(--text2);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.modal-close:hover{background:var(--surface3);color:var(--text)}
+.modal-body{padding:18px 20px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:14px}
+.edit-textarea{width:100%;min-height:260px;padding:14px;border:0.5px solid var(--border2);border-radius:10px;font-family:'SF Mono',Menlo,monospace;font-size:12px;line-height:1.75;color:var(--text);background:var(--surface2);resize:vertical;outline:none;transition:border-color .18s}
+.edit-textarea:focus{border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 3px rgba(108,142,245,0.1)}
+.modal-footer{padding:14px 20px;border-top:0.5px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+
+/* ── Skill detail modal ── */
+.skill-modal-bg{display:none;position:fixed;inset:0;background:rgba(44,47,66,0.3);backdrop-filter:blur(8px);z-index:250;align-items:center;justify-content:center}
+.skill-modal-bg.show{display:flex}
+.skill-modal{background:var(--surface);border:0.5px solid var(--border2);border-radius:18px;width:600px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(44,47,66,0.18)}
+.skill-modal-head{padding:20px 22px 16px;border-bottom:0.5px solid var(--border);display:flex;align-items:flex-start;gap:12px}
+.skill-modal-icon{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--purple));display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;color:#fff}
+.skill-modal-title-wrap{flex:1}
+.skill-modal-title{font-size:16px;font-weight:600;letter-spacing:-.02em;margin-bottom:6px}
+.skill-modal-badges{display:flex;gap:6px;flex-wrap:wrap}
+.skill-modal-close{width:28px;height:28px;border-radius:50%;border:0.5px solid var(--border2);background:var(--surface2);color:var(--text2);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
+.skill-modal-close:hover{background:var(--surface3);color:var(--text)}
+.skill-modal-body{padding:20px 22px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:16px}
+.skill-detail-section{display:flex;flex-direction:column;gap:6px}
+.skill-detail-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text3)}
+.skill-detail-text{font-size:13px;color:var(--text);line-height:1.7}
+.skill-detail-path{font-size:11px;font-family:'SF Mono',Menlo,monospace;color:var(--text3);background:var(--surface2);padding:8px 12px;border-radius:8px;border:0.5px solid var(--border2)}
+.skill-cmds-wrap{display:flex;flex-wrap:wrap;gap:6px}
+.skill-cmd-tag{font-size:11px;font-family:'SF Mono',Menlo,monospace;padding:4px 10px;background:var(--accent-soft);border:0.5px solid rgba(108,142,245,0.2);border-radius:6px;color:var(--accent)}
+.skill-modal-footer{padding:14px 22px;border-top:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.skill-delete-area{display:flex;align-items:center;gap:8px}
+.skill-readonly-note{font-size:11px;color:var(--text3)}
+
+/* ── Session detail chat ── */
+#session-chat-body{background:var(--bg)}
+.chat-msg{display:flex;align-items:flex-start;gap:10px;padding:5px 16px}
+.chat-msg-user{flex-direction:row-reverse}
+.chat-msg-avatar{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.chat-msg-user .chat-msg-avatar{background:#dde6fd;border:0.5px solid rgba(108,142,245,0.25)}
+.chat-msg-assistant .chat-msg-avatar{background:var(--purple-soft);border:0.5px solid rgba(167,139,250,0.25)}
+.chat-msg-content{min-width:0;max-width:68%}
+.chat-msg-assistant .chat-msg-content{max-width:78%}
+.chat-msg-role{font-size:11px;font-weight:600;color:var(--text2);margin-bottom:5px}
+.chat-msg-user .chat-msg-bubble{background:var(--accent);border-radius:12px 3px 12px 12px;padding:10px 14px}
+.chat-msg-assistant .chat-msg-bubble{background:var(--surface);border:0.5px solid var(--border2);border-radius:3px 12px 12px 12px;padding:10px 14px}
+.chat-msg-text{font-size:13px;line-height:1.75;white-space:pre-wrap;word-break:break-word;max-height:280px;overflow:hidden;position:relative}
+.chat-msg-user .chat-msg-text{color:#fff}
+.chat-msg-assistant .chat-msg-text{color:var(--text)}
+.chat-msg-text.expanded{max-height:none}
+.chat-msg-text:not(.expanded)::after{content:'';position:absolute;bottom:0;left:0;right:0;height:44px;pointer-events:none}
+.chat-msg-user .chat-msg-text:not(.expanded)::after{background:linear-gradient(transparent,var(--accent))}
+.chat-msg-assistant .chat-msg-text:not(.expanded)::after{background:linear-gradient(transparent,var(--surface))}
+.chat-expand-btn{margin-top:7px;font-size:11px;cursor:pointer;background:none;border:none;padding:0;display:block}
+.chat-msg-user .chat-expand-btn{color:rgba(255,255,255,0.75);margin-left:auto;text-align:right}
+.chat-msg-assistant .chat-expand-btn{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <div class="logo">
+    <div class="logo-mark">Ψ</div>
+    <span class="logo-text">Claude Cortex</span>
+  </div>
+  <button class="refresh-btn" onclick="initApp().then(()=>toast('已刷新','success'))">↻ 刷新</button>
+</div>
+
+<div class="app-layout">
+
+<!-- ── Sidebar ── -->
+<aside class="sidebar">
+  <div class="sidebar-group">
+    <div class="sidebar-group-label">技能</div>
+    <button class="nav-item active" onclick="switchPage('skills',this)"><span class="nav-icon">⚡</span>技能<span class="nav-badge" id="nav-badge-skills">-</span></button>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-label">扩展</div>
+    <button class="nav-item" onclick="switchPage('plugins',this)"><span class="nav-icon">🧩</span>插件<span class="nav-badge" id="nav-badge-plugins">-</span></button>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-label">数据</div>
+    <button class="nav-item" onclick="switchPage('memory',this)"><span class="nav-icon">💾</span>记忆<span class="nav-badge" id="nav-badge-memory">-</span></button>
+    <button class="nav-item" onclick="switchPage('sessions',this)"><span class="nav-icon">💬</span>会话历史</button>
+    <button class="nav-item" onclick="switchPage('stats',this)"><span class="nav-icon">📊</span>使用统计</button>
+  </div>
+  <div class="sidebar-group">
+    <div class="sidebar-group-label">系统</div>
+    <button class="nav-item" onclick="switchPage('cache',this)"><span class="nav-icon">🗑️</span>缓存</button>
+  </div>
+</aside>
+
+<div class="main-content">
+
+<!-- ══ 技能 ══ -->
+<div class="page active" id="page-skills">
+  <div class="stats">
+    <div class="stat"><div class="stat-val c-green" id="stat-global-skills">-</div><div class="stat-label">全局自定义技能</div></div>
+    <div class="stat"><div class="stat-val c-teal" id="stat-project-skills">-</div><div class="stat-label">项目技能</div></div>
+    <div class="stat"><div class="stat-val c-purple">3</div><div class="stat-label">内置技能组</div></div>
+  </div>
+
+  <div class="section" id="skills-global-section">
+    <div class="section-header">
+      <span class="section-label">全局技能</span>
+      <span class="pill">~/.claude/skills/</span>
+      <div class="section-action"><button class="btn btn-primary btn-sm" onclick="openCreateSkill()">+ 新建技能</button></div>
+    </div>
+    <div class="cards" id="skills-global-cards"></div>
+  </div>
+
+  <hr>
+
+  <div class="section" id="skills-project-section">
+    <div class="section-header">
+      <span class="section-label">项目技能</span>
+      <span class="pill">项目/.claude/skills/</span>
+    </div>
+    <div class="cards" id="skills-project-cards"></div>
+  </div>
+
+  <hr>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-label">内置技能</span>
+      <span class="pill">Claude Code 原生 · 只读</span>
+    </div>
+    <div class="cards">
+      <div class="card clickable" id="skill-builtin-code" onclick="openSkillDetail({id:'skill-builtin-code',name:'代码质量',icon:'🔍',type:'builtin',typeLabel:'内置',scope:'global',project:null,path:'Claude Code 内置',cmds:['/code-review','/verify','/run','/simplify','/security-review'],desc:'内置代码质量工具集。包含代码审查、安全检查、运行验证、代码简化等命令。',deletable:false})">
+        <div class="scope-row"><div class="badge badge-builtin"><span class="dot"></span>内置</div><div class="scope-badge scope-global">🌐 全局</div></div>
+        <div class="card-name">代码质量</div>
+        <div class="card-desc">代码审查、安全检查、验证</div>
+        <div class="cmds"><span class="cmd">/code-review</span><span class="cmd">/verify</span><span class="cmd">/run</span><span class="cmd">/simplify</span></div>
+        <div class="click-hint">点击查看详情 →</div>
+      </div>
+      <div class="card clickable" id="skill-builtin-project" onclick="openSkillDetail({id:'skill-builtin-project',name:'项目 & 流程',icon:'⚙️',type:'builtin',typeLabel:'内置',scope:'global',project:null,path:'Claude Code 内置',cmds:['/batch','/loop','/debug'],desc:'内置项目流程工具。批处理、循环执行、调试定位等。',deletable:false})">
+        <div class="scope-row"><div class="badge badge-builtin"><span class="dot"></span>内置</div><div class="scope-badge scope-global">🌐 全局</div></div>
+        <div class="card-name">项目 & 流程</div>
+        <div class="card-desc">批处理、循环、图调试</div>
+        <div class="cmds"><span class="cmd">/batch</span><span class="cmd">/loop</span><span class="cmd">/debug</span></div>
+        <div class="click-hint">点击查看详情 →</div>
+      </div>
+      <div class="card clickable" id="skill-builtin-other" onclick="openSkillDetail({id:'skill-builtin-other',name:'其他',icon:'📦',type:'builtin',typeLabel:'内置',scope:'global',project:null,path:'Claude Code 内置',cmds:['/claude-api','/fewer-permission-prompts'],desc:'其他内置工具。',deletable:false})">
+        <div class="scope-row"><div class="badge badge-builtin"><span class="dot"></span>内置</div><div class="scope-badge scope-global">🌐 全局</div></div>
+        <div class="card-name">其他</div>
+        <div class="card-desc">API 文档、权限简化</div>
+        <div class="cmds"><span class="cmd">/claude-api</span><span class="cmd">/fewer-permission-prompts</span></div>
+        <div class="click-hint">点击查看详情 →</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 插件 ══ -->
+<div class="page" id="page-plugins">
+  <div class="stats">
+    <div class="stat"><div class="stat-val c-accent" id="stat-plugins">-</div><div class="stat-label">已安装插件</div></div>
+    <div class="stat"><div class="stat-val c-green" id="stat-plugin-skills">-</div><div class="stat-label">插件提供技能</div></div>
+  </div>
+  <div class="section">
+    <div class="section-header"><span class="section-label">已安装插件</span></div>
+    <div class="list" id="plugins-list"></div>
+  </div>
+</div>
+
+<!-- ══ 记忆 ══ -->
+<div class="page" id="page-memory">
+  <div class="stats">
+    <div class="stat"><div class="stat-val c-purple" id="stat-global-mem">-</div><div class="stat-label">全局记忆文件</div></div>
+    <div class="stat"><div class="stat-val c-accent" id="stat-project-mem">-</div><div class="stat-label">项目记忆目录</div></div>
+  </div>
+  <div class="section" id="memory-global-section">
+    <div class="section-header"><span class="section-label">全局记忆</span><span class="pill">~/.claude/memory/</span></div>
+    <div class="mem-card">
+      <div class="mem-files" id="memory-global-files"></div>
+    </div>
+  </div>
+  <hr>
+  <div class="section">
+    <div class="section-header"><span class="section-label">项目记忆</span><span class="pill">~/.claude/projects/*/memory/</span></div>
+    <div class="mem-proj-tabs" id="mem-proj-tabs"></div>
+    <div id="mem-proj-cards"></div>
+  </div>
+</div>
+
+<!-- ══ 会话历史 ══ -->
+<div class="page" id="page-sessions">
+  <div class="stats">
+    <div class="stat"><div class="stat-val c-accent" id="stat-sessions">-</div><div class="stat-label">会话总数</div></div>
+    <div class="stat"><div class="stat-val c-green" id="stat-week-tokens">-</div><div class="stat-label">本周 Token</div></div>
+    <div class="stat"><div class="stat-val c-amber" id="stat-active-projects">-</div><div class="stat-label">活跃项目</div></div>
+  </div>
+  <div class="section">
+    <div class="section-header"><span class="section-label">最近会话</span><span class="pill">~/.claude/projects/</span></div>
+    <div id="sessions-list"></div>
+  </div>
+</div>
+
+<!-- ══ 使用统计 ══ -->
+<div class="page" id="page-stats">
+  <div class="stats">
+    <div class="stat"><div class="stat-val c-accent" id="stat-total-sessions">-</div><div class="stat-label">会话总数</div></div>
+    <div class="stat"><div class="stat-val c-purple" id="stat-total-tokens">-</div><div class="stat-label">Token 总量</div></div>
+    <div class="stat"><div class="stat-val c-green" id="stat-avg-tokens">-</div><div class="stat-label">平均每次</div></div>
+    <div class="stat"><div class="stat-val c-amber" id="stat-proj-count">-</div><div class="stat-label">活跃项目</div></div>
+  </div>
+  <div class="chart-wrap">
+    <div class="chart-title">近 14 天 Token 用量</div>
+    <div class="bar-chart" id="stats-bar-chart"></div>
+  </div>
+  <div class="chart-wrap">
+    <div class="chart-title">项目 Token 用量分布</div>
+    <table class="proj-table">
+      <thead><tr><th>项目</th><th>Token 用量</th><th>会话次数</th><th>占比</th></tr></thead>
+      <tbody id="stats-proj-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══ 缓存 ══ -->
+<div class="page" id="page-cache">
+  <div class="stats">
+    <div class="stat"><div class="stat-val c-amber" id="total-size">-</div><div class="stat-label">可清除总量</div></div>
+    <div class="stat"><div class="stat-val c-red" id="cache-largest-size">-</div><div class="stat-label">最大单项</div></div>
+    <div class="stat"><div class="stat-val c-accent" id="cache-item-count">-</div><div class="stat-label">可清理项目</div></div>
+  </div>
+  <div class="clear-all-bar">
+    <div class="clear-all-label"><strong>一键清除</strong>所有可清除缓存 <span id="clear-all-size" style="color:var(--text2)"></span></div>
+    <button class="btn btn-warning" onclick="clearAll()" style="padding:7px 16px;font-size:12px">⚡ 全部清除</button>
+  </div>
+  <div class="section">
+    <div class="section-header"><span class="section-label">全局缓存</span><span class="pill">~/.claude/</span></div>
+    <div class="cache-grid" id="cache-grid"></div>
+  </div>
+</div>
+
+</div><!-- /main-content -->
+</div><!-- /app-layout -->
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Confirm modal -->
+<div class="confirm-bg" id="confirm-bg">
+  <div class="confirm-box">
+    <div class="confirm-title" id="confirm-title">确认删除</div>
+    <div class="confirm-msg" id="confirm-msg"></div>
+    <div class="confirm-actions">
+      <button class="btn btn-ghost" onclick="closeConfirm()">取消</button>
+      <button class="btn btn-danger" id="confirm-ok-btn">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit modal -->
+<div class="modal-bg" id="edit-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="edit-title"></h3>
+      <button class="modal-close" onclick="closeEdit()">✕</button>
+    </div>
+    <div class="modal-body">
+      <textarea class="edit-textarea" id="edit-textarea" spellcheck="false"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeEdit()">取消</button>
+      <button class="btn btn-primary" onclick="saveEdit()">保存更改</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create skill modal -->
+<div class="modal-bg" id="create-skill-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>新建技能</h3>
+      <button class="modal-close" onclick="closeCreateSkill()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">技能名称</label>
+        <input class="form-input" id="new-skill-name" placeholder="例如：deploy-check" type="text">
+      </div>
+      <div class="form-group">
+        <label class="form-label">范围</label>
+        <select class="form-input form-select" id="new-skill-scope">
+          <option value="global">🌐 全局 (~/.claude/skills/)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">一句话描述</label>
+        <input class="form-input" id="new-skill-desc" placeholder="描述技能的核心功能" type="text">
+      </div>
+      <div class="form-group">
+        <label class="form-label">触发条件</label>
+        <textarea class="edit-textarea" id="new-skill-trigger" style="min-height:90px" placeholder="描述 Claude 何时应自动调用此技能（写入 SKILL.md frontmatter）..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">技能指令（Markdown）</label>
+        <textarea class="edit-textarea" id="new-skill-content" style="min-height:140px" placeholder="# 技能名称&#10;&#10;## 步骤&#10;1. ..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeCreateSkill()">取消</button>
+      <button class="btn btn-primary" onclick="doCreateSkill()">创建技能</button>
+    </div>
+  </div>
+</div>
+
+<!-- Skill detail modal -->
+<div class="skill-modal-bg" id="skill-detail-modal">
+  <div class="skill-modal">
+    <div class="skill-modal-head">
+      <div class="skill-modal-icon" id="sd-icon">📋</div>
+      <div class="skill-modal-title-wrap">
+        <div class="skill-modal-title" id="sd-name"></div>
+        <div class="skill-modal-badges" id="sd-badges"></div>
+      </div>
+      <button class="skill-modal-close" onclick="closeSkillDetail()">✕</button>
+    </div>
+    <div class="skill-modal-body">
+      <div class="skill-detail-section">
+        <div class="skill-detail-label">技能说明</div>
+        <div class="skill-detail-text" id="sd-desc"></div>
+      </div>
+      <div class="skill-detail-section">
+        <div class="skill-detail-label">可用命令</div>
+        <div class="skill-cmds-wrap" id="sd-cmds"></div>
+      </div>
+      <div class="skill-detail-section">
+        <div class="skill-detail-label">路径</div>
+        <div class="skill-detail-path" id="sd-path"></div>
+      </div>
+    </div>
+    <div class="skill-modal-footer">
+      <div class="skill-delete-area" id="sd-delete-area"></div>
+      <button class="btn btn-ghost" onclick="closeSkillDetail()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Page switch ──
+function switchPage(name,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'))
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'))
+  document.getElementById('page-'+name).classList.add('active')
+  el.classList.add('active')
+}
+
+// ── Memory project tab switch ──
+function switchMemTab(id,el){
+  document.querySelectorAll('.mem-proj-card').forEach(c=>c.style.display='none')
+  document.querySelectorAll('.mem-proj-tab').forEach(t=>t.classList.remove('active'))
+  document.getElementById(id).style.display=''
+  el.classList.add('active')
+}
+
+// ── Toast ──
+let toastTimer
+function toast(msg,type=''){
+  const t=document.getElementById('toast')
+  t.textContent=msg
+  t.className='toast '+(type||'')
+  clearTimeout(toastTimer)
+  requestAnimationFrame(()=>t.classList.add('show'))
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2400)
+}
+
+// ── Confirm ──
+let pendingId=null
+function confirmDelete(id,name){
+  event&&event.stopPropagation&&event.stopPropagation()
+  pendingId=id
+  const isPlugin=id.startsWith('plugin-')
+  const isCache=id.startsWith('cc-')
+  document.getElementById('confirm-title').textContent=isPlugin?'确认卸载插件':isCache?'确认清除缓存':'确认删除'
+  document.getElementById('confirm-msg').textContent=
+    isPlugin?`卸载 ${name} 后，该插件提供的所有技能将不可用。确认继续？`:
+    isCache?`将清除 ${name} 的缓存文件。此操作不可撤销。`:
+    `删除 ${name}？此操作不可撤销。`
+  const btn=document.getElementById('confirm-ok-btn')
+  btn.textContent=isPlugin?'确认卸载':isCache?'确认清除':'确认删除'
+  document.getElementById('confirm-bg').classList.add('show')
+}
+function closeConfirm(){document.getElementById('confirm-bg').classList.remove('show');pendingId=null;window._confirmCallback=null}
+document.getElementById('confirm-ok-btn').onclick=function(){
+  if(window._confirmCallback){const cb=window._confirmCallback;window._confirmCallback=null;closeConfirm();cb();return}
+  if(!pendingId){closeConfirm();return}
+  const el=document.getElementById(pendingId)
+  if(el){el.classList.add('deleted');setTimeout(()=>el.remove(),300)}
+  const id=pendingId
+  closeConfirm();closeSkillDetail()
+  toast(id.startsWith('plugin-')?'插件已卸载':id.startsWith('cc-')?'缓存已清除':'已删除','success')
+}
+document.getElementById('confirm-bg').onclick=function(e){if(e.target===this)closeConfirm()}
+
+// ── Edit modal ──
+let editingId=null
+function openEdit(id,filename,content){
+  event&&event.stopPropagation&&event.stopPropagation()
+  editingId=id
+  document.getElementById('edit-title').textContent=filename
+  document.getElementById('edit-textarea').value=content
+  document.getElementById('edit-modal').classList.add('show')
+}
+function closeEdit(){document.getElementById('edit-modal').classList.remove('show');editingId=null}
+document.getElementById('edit-modal').onclick=function(e){if(e.target===this)closeEdit()}
+
+// ── Create skill modal ──
+function closeCreateSkill(){document.getElementById('create-skill-modal').classList.remove('show')}
+document.getElementById('create-skill-modal').onclick=function(e){if(e.target===this)closeCreateSkill()}
+
+// ── Cache ──
+
+// ── Skill detail modal ──
+let currentSkillId=null
+function openSkillDetail(skill){
+  currentSkillId=skill.id
+  document.getElementById('sd-icon').textContent=skill.icon
+  document.getElementById('sd-name').textContent=skill.name
+  const typeClass={'custom':'badge-custom','builtin':'badge-builtin','plugin':'badge-plugin'}[skill.type]||'badge-builtin'
+  let html=`<span class="badge ${typeClass}" style="margin:0"><span class="dot"></span>${skill.typeLabel}</span>`
+  if(skill.scope==='global'){html+=`<span class="scope-badge scope-global" style="margin:0">🌐 全局</span>`}
+  else{html+=`<span class="scope-badge scope-project" style="margin:0">📁 项目</span>`;if(skill.project)html+=`<span class="scope-project-name" style="font-size:11px;color:var(--text2)">${skill.project}</span>`}
+  document.getElementById('sd-badges').innerHTML=html
+  document.getElementById('sd-desc').textContent=skill.desc
+  document.getElementById('sd-cmds').innerHTML=skill.cmds.map(c=>`<span class="skill-cmd-tag">${c}</span>`).join('')
+  document.getElementById('sd-path').textContent=skill.path
+  window._currentSkillPath=skill.deletable?skill.path:null
+  window._currentSkillName=skill.name
+  document.getElementById('sd-delete-area').innerHTML=skill.deletable
+    ?`<button class="btn btn-danger" onclick="doDeleteSkill()">删除技能</button>`
+    :`<span class="skill-readonly-note">内置技能 · 只读</span>`
+  document.getElementById('skill-detail-modal').classList.add('show')
+}
+function closeSkillDetail(){document.getElementById('skill-detail-modal').classList.remove('show');currentSkillId=null}
+document.getElementById('skill-detail-modal').onclick=function(e){if(e.target===this)closeSkillDetail()}
+</script>
+<!-- Session detail modal -->
+<div class="modal-bg" id="session-detail-modal">
+  <div class="modal" style="width:780px;max-height:88vh">
+    <div class="modal-head">
+      <h3 id="session-detail-title" style="font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0"></h3>
+      <button class="modal-close" onclick="closeSessionDetail()">✕</button>
+    </div>
+    <div class="modal-body" id="session-chat-body" style="padding:16px 0 32px;gap:0;overflow-y:auto"></div>
+  </div>
+</div>
+
+<script>
+function closeSessionDetail(){document.getElementById('session-detail-modal').classList.remove('show')}
+document.getElementById('session-detail-modal').onclick=function(e){if(e.target===this)closeSessionDetail()}
+</script>
+<script src="/main.js"></script>
+</body>
+</html>
