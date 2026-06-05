@@ -77,7 +77,7 @@ function skillCardHtml(s) {
   const cmds = (s.commands || []).map(c => `<span class="cmd">${escHtml(c)}</span>`).join('');
   const dataAttr = escHtml(JSON.stringify(s));
   return `
-  <div class="card clickable" data-skill='${dataAttr}' onclick="openSkillDetailFromData(this)">
+  <div class="card clickable" data-skill="${dataAttr}" onclick="openSkillDetailFromData(this)">
     <div class="scope-row">
       <div class="badge badge-custom"><span class="dot"></span>自定义</div>${scopeBadge}
     </div>
