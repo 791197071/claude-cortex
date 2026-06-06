@@ -22,6 +22,13 @@
 }
 body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;-webkit-font-smoothing:antialiased}
 
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(100,110,160,0.2);border-radius:10px}
+::-webkit-scrollbar-thumb:hover{background:rgba(100,110,160,0.38)}
+::-webkit-scrollbar-corner{background:transparent}
+
 /* ── Titlebar ── */
 .titlebar{position:fixed;top:0;left:0;right:0;z-index:100;height:var(--titlebar-h);background:rgba(247,248,252,0.92);backdrop-filter:blur(20px);border-bottom:0.5px solid var(--border2);display:flex;align-items:center;padding:0 20px;gap:14px}
 .logo{display:flex;align-items:center;gap:9px}
@@ -61,7 +68,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;backg
 .section-action{margin-left:auto}
 
 /* ── Cards ── */
-.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
 .card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:18px;transition:border-color .18s,transform .18s,box-shadow .18s;position:relative;display:flex;flex-direction:column}
 .card.clickable{cursor:pointer}
 .card.clickable:hover{border-color:rgba(108,142,245,0.35);transform:translateY(-2px);box-shadow:0 6px 24px rgba(108,142,245,0.1)}
@@ -96,6 +103,37 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;backg
 .btn-primary{background:var(--accent-soft);color:var(--accent);border-color:rgba(108,142,245,0.25)}.btn-primary:hover{background:#dde6fd;border-color:rgba(108,142,245,0.5)}
 .btn-success{background:var(--green-soft);color:#2a9d74;border-color:rgba(52,199,123,0.25)}.btn-success:hover{background:#d1fae5}
 .btn-sm{padding:4px 10px;font-size:11px}
+.settings-card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:12px}
+.settings-provider-card{flex:1;max-width:160px;background:var(--surface);border:0.5px solid var(--border2);border-radius:var(--radius);padding:18px 16px;cursor:pointer;transition:all .18s;display:flex;flex-direction:column;align-items:center;position:relative}
+.settings-provider-card:hover{border-color:rgba(108,142,245,0.3);background:var(--accent-soft)}
+.settings-provider-card.active{border-color:var(--accent);background:var(--accent-soft)}
+.settings-active-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);position:absolute;top:10px;right:10px;display:none}
+.settings-provider-card.active .settings-active-dot{display:block}
+.settings-provider{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.settings-provider-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;flex-shrink:0}
+.settings-provider-info{flex:1}
+.settings-provider-name{font-size:13px;font-weight:600;color:var(--text)}
+.settings-provider-desc{font-size:11px;color:var(--text3);margin-top:2px}
+.settings-key-status{font-size:11px;font-weight:500;padding:3px 8px;border-radius:20px}
+.settings-key-status.configured{background:var(--green-soft);color:#2a9d74;border:0.5px solid rgba(52,199,123,0.25)}
+.settings-key-status.empty{background:var(--surface2);color:var(--text3);border:0.5px solid var(--border2)}
+.settings-key-row{display:flex;gap:8px;align-items:center}
+.settings-key-input{flex:1;padding:8px 12px;border:0.5px solid var(--border2);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;font-family:monospace;outline:none;transition:border-color .18s}
+.settings-key-input:focus{border-color:var(--accent)}
+.settings-eye-btn{width:32px;height:32px;border-radius:8px;border:0.5px solid var(--border2);background:var(--surface2);color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .18s}
+.settings-eye-btn:hover{background:var(--surface3);color:var(--text)}
+.export-btn{margin-left:auto;display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border-radius:7px;border:0.5px solid var(--border2);background:var(--surface);color:var(--text2);font-size:11px;font-weight:500;cursor:pointer;transition:all .18s;letter-spacing:.01em}
+.export-btn:hover{background:var(--accent-soft);color:var(--accent);border-color:rgba(108,142,245,0.3)}
+.export-field-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:8px}
+.export-range-pills{display:flex;gap:6px;flex-wrap:wrap}
+.range-pill{height:30px;padding:0 14px;border-radius:20px;border:1.5px solid var(--border2);background:var(--surface);color:var(--text2);font-size:12px;font-weight:500;cursor:pointer;transition:all .18s}
+.range-pill:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.range-pill.active{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;box-shadow:0 2px 8px rgba(108,142,245,0.35)}
+.export-date-input{width:100%;padding:7px 10px;border:0.5px solid var(--border2);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;outline:none;transition:border-color .18s}
+.export-date-input:focus{border-color:var(--accent)}
+.export-fmt-card{flex:1;padding:12px 14px;border-radius:10px;border:0.5px solid var(--border2);background:var(--surface2);cursor:pointer;transition:all .18s;text-align:center;display:flex;flex-direction:column;align-items:center}
+.export-fmt-card:hover{background:var(--surface3)}
+.export-fmt-card.active{background:var(--accent-soft);border-color:rgba(108,142,245,0.35);color:var(--accent)}
 
 /* ── List / Row ── */
 .list{display:flex;flex-direction:column;gap:8px}
@@ -223,9 +261,13 @@ hr{border:none;border-top:0.5px solid var(--border);margin:2rem 0}
 .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
 .bar-area{width:100%;height:100px;display:flex;align-items:flex-end}
 .bar-val{font-size:10px;color:var(--text2);font-weight:500}
-.bar{width:100%;border-radius:5px 5px 0 0;background:linear-gradient(to top,var(--accent),#a78bfa);opacity:.8;transition:height .3s,opacity .18s;min-height:3px}
-.bar:hover{opacity:1}
+.bar-stack{width:100%;border-radius:5px 5px 0 0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;transition:height .3s;min-height:3px}
+.bar-segment{width:100%;transition:height .3s}
+.bar-stack:hover{filter:brightness(1.08)}
 .bar-label{font-size:10px;color:var(--text3)}
+.model-legend{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:14px;padding-top:12px;border-top:0.5px solid var(--border)}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)}
+.legend-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
 .proj-table{width:100%;border-collapse:collapse}
 .proj-table th{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);text-align:left;padding:8px 12px;border-bottom:0.5px solid var(--border)}
 .proj-table td{font-size:12.5px;padding:11px 12px;border-bottom:0.5px solid var(--border);color:var(--text2)}
@@ -247,7 +289,7 @@ hr{border:none;border-top:0.5px solid var(--border);margin:2rem 0}
 .form-select{appearance:none;cursor:pointer}
 
 /* ── Toast ── */
-.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--text);color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;opacity:0;transition:all .25s;pointer-events:none;z-index:999;white-space:nowrap}
+.toast{position:fixed;top:68px;left:50%;transform:translateX(-50%) translateY(-12px);background:var(--text);color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;opacity:0;transition:all .25s;pointer-events:none;z-index:999;white-space:nowrap}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.success{background:#16a34a}
 .toast.danger{background:#dc2626}
@@ -262,6 +304,8 @@ hr{border:none;border-top:0.5px solid var(--border);margin:2rem 0}
 
 /* ── Edit modal ── */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(44,47,66,0.3);backdrop-filter:blur(8px);z-index:200;align-items:center;justify-content:center}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin-icon{display:inline-block;animation:spin 1s linear infinite}
 .modal-bg.show{display:flex}
 .modal{background:var(--surface);border:0.5px solid var(--border2);border-radius:18px;width:660px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(44,47,66,0.18)}
 .modal-head{padding:18px 20px 14px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;gap:10px}
@@ -292,6 +336,7 @@ hr{border:none;border-top:0.5px solid var(--border);margin:2rem 0}
 .skill-cmds-wrap{display:flex;flex-wrap:wrap;gap:6px}
 .skill-cmd-tag{font-size:11px;font-family:'SF Mono',Menlo,monospace;padding:4px 10px;background:var(--accent-soft);border:0.5px solid rgba(108,142,245,0.2);border-radius:6px;color:var(--accent)}
 .skill-modal-footer{padding:14px 22px;border-top:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+#sd-content:focus{border-color:var(--accent)}
 .skill-delete-area{display:flex;align-items:center;gap:8px}
 .skill-readonly-note{font-size:11px;color:var(--text3)}
 
@@ -326,7 +371,7 @@ hr{border:none;border-top:0.5px solid var(--border);margin:2rem 0}
     <div class="logo-mark">Ψ</div>
     <span class="logo-text">Claude Cortex</span>
   </div>
-  <button class="refresh-btn" onclick="initApp().then(()=>toast('已刷新','success'))">↻ 刷新</button>
+  <button class="refresh-btn" style="margin-left:auto" onclick="initApp().then(()=>toast('已刷新','success'))">↻ 刷新</button>
 </div>
 
 <div class="app-layout">
@@ -343,13 +388,14 @@ hr{border:none;border-top:0.5px solid var(--border);margin:2rem 0}
   </div>
   <div class="sidebar-group">
     <div class="sidebar-group-label">数据</div>
-    <button class="nav-item" onclick="switchPage('memory',this)"><span class="nav-icon">💾</span>记忆<span class="nav-badge" id="nav-badge-memory">-</span></button>
+    <button class="nav-item" onclick="switchPage('memory',this)"><span class="nav-icon">💾</span>规则记忆<span class="nav-badge" id="nav-badge-memory">-</span></button>
     <button class="nav-item" onclick="switchPage('sessions',this)"><span class="nav-icon">💬</span>会话历史</button>
     <button class="nav-item" onclick="switchPage('stats',this)"><span class="nav-icon">📊</span>使用统计</button>
   </div>
   <div class="sidebar-group">
     <div class="sidebar-group-label">系统</div>
     <button class="nav-item" onclick="switchPage('cache',this)"><span class="nav-icon">🗑️</span>缓存</button>
+    <button class="nav-item" onclick="switchPage('settings',this)"><span class="nav-icon">⚙️</span>设置</button>
   </div>
 </aside>
 
@@ -360,19 +406,17 @@ hr{border:none;border-top:0.5px solid var(--border);margin:2rem 0}
   <div class="stats">
     <div class="stat"><div class="stat-val c-green" id="stat-global-skills">-</div><div class="stat-label">全局自定义技能</div></div>
     <div class="stat"><div class="stat-val c-teal" id="stat-project-skills">-</div><div class="stat-label">项目技能</div></div>
-    <div class="stat"><div class="stat-val c-purple">3</div><div class="stat-label">内置技能组</div></div>
+    <div class="stat"><div class="stat-val c-purple" id="stat-builtin-skills">-</div><div class="stat-label">内置技能组</div></div>
   </div>
 
   <div class="section" id="skills-global-section">
     <div class="section-header">
       <span class="section-label">全局技能</span>
       <span class="pill">~/.claude/skills/</span>
-      <div class="section-action"><button class="btn btn-primary btn-sm" onclick="openCreateSkill()">+ 新建技能</button></div>
+      <div class="section-action"><button class="btn btn-primary" onclick="openCreateSkill()">+ 新建技能</button></div>
     </div>
     <div class="cards" id="skills-global-cards"></div>
   </div>
-
-  <hr>
 
   <div class="section" id="skills-project-section">
     <div class="section-header">
@@ -382,14 +426,13 @@ hr{border:none;border-top:0.5px solid var(--border);margin:2rem 0}
     <div class="cards" id="skills-project-cards"></div>
   </div>
 
-  <hr>
 
   <div class="section">
     <div class="section-header">
       <span class="section-label">内置技能</span>
       <span class="pill">Claude Code 原生 · 只读</span>
     </div>
-    <div class="cards">
+    <div class="cards" id="skills-builtin-cards">
       <div class="card clickable" id="skill-builtin-code" onclick="openSkillDetail({id:'skill-builtin-code',name:'代码质量',icon:'🔍',type:'builtin',typeLabel:'内置',scope:'global',project:null,path:'Claude Code 内置',cmds:['/code-review','/verify','/run','/simplify','/security-review'],desc:'内置代码质量工具集。包含代码审查、安全检查、运行验证、代码简化等命令。',deletable:false})">
         <div class="scope-row"><div class="badge badge-builtin"><span class="dot"></span>内置</div><div class="scope-badge scope-global">🌐 全局</div></div>
         <div class="card-name">代码质量</div>
@@ -455,7 +498,8 @@ hr{border:none;border-top:0.5px solid var(--border);margin:2rem 0}
     <div class="stat"><div class="stat-val c-amber" id="stat-active-projects">-</div><div class="stat-label">活跃项目</div></div>
   </div>
   <div class="section">
-    <div class="section-header"><span class="section-label">最近会话</span><span class="pill">~/.claude/projects/</span></div>
+    <div class="section-header"><span class="section-label">最近会话</span><span class="pill">~/.claude/projects/</span><div style="display:flex;gap:8px;margin-left:auto"><button class="btn btn-primary" style="gap:6px;padding:8px 16px;font-size:13px" onclick="openExportModal()"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 1v8M4 6l3 3 3-3M2 10v1a1 1 0 001 1h8a1 1 0 001-1v-1"/></svg>导出会话</button><button class="btn btn-primary" style="gap:6px;background:var(--purple-soft);color:#7c3aed;border-color:rgba(167,139,250,0.3);padding:8px 16px;font-size:13px" onclick="openSummaryModal()"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h10M2 7h7M2 10h5"/></svg>一键总结</button></div></div>
+    <div id="sessions-proj-tabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px"></div>
     <div id="sessions-list"></div>
   </div>
 </div>
@@ -471,13 +515,25 @@ hr{border:none;border-top:0.5px solid var(--border);margin:2rem 0}
   <div class="chart-wrap">
     <div class="chart-title">近 14 天 Token 用量</div>
     <div class="bar-chart" id="stats-bar-chart"></div>
+    <div class="model-legend" id="model-legend"></div>
   </div>
   <div class="chart-wrap">
-    <div class="chart-title">项目 Token 用量分布</div>
-    <table class="proj-table">
-      <thead><tr><th>项目</th><th>Token 用量</th><th>会话次数</th><th>占比</th></tr></thead>
-      <tbody id="stats-proj-tbody"></tbody>
-    </table>
+    <div class="mem-proj-tabs" style="margin-bottom:14px">
+      <button class="mem-proj-tab active" id="stats-tab-proj" onclick="switchStatsTab('proj')">项目用量</button>
+      <button class="mem-proj-tab" id="stats-tab-model" onclick="switchStatsTab('model')">模型用量</button>
+    </div>
+    <div id="stats-panel-proj">
+      <table class="proj-table">
+        <thead><tr><th>项目</th><th>Token 用量</th><th>会话次数</th><th>占比</th></tr></thead>
+        <tbody id="stats-proj-tbody"></tbody>
+      </table>
+    </div>
+    <div id="stats-panel-model" style="display:none">
+      <table class="proj-table">
+        <thead><tr><th>模型</th><th>Token 用量</th><th>占比</th></tr></thead>
+        <tbody id="stats-model-tbody"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -495,6 +551,60 @@ hr{border:none;border-top:0.5px solid var(--border);margin:2rem 0}
   <div class="section">
     <div class="section-header"><span class="section-label">全局缓存</span><span class="pill">~/.claude/</span></div>
     <div class="cache-grid" id="cache-grid"></div>
+  </div>
+</div>
+
+<!-- ══ 设置 ══ -->
+<div class="page" id="page-settings" style="position:relative">
+  <button class="btn btn-ghost" onclick="resetAllKeys()" style="position:absolute;top:0;right:0;font-size:12px;color:var(--danger);border-color:rgba(255,69,58,0.25);padding:6px 14px">
+    <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><path d="M2 7a5 5 0 1 1 1.4 3.5"/><path d="M2 11V7h4"/></svg>
+    重置所有 API Key
+  </button>
+  <div class="section">
+
+    <!-- 第一步：选模型 -->
+    <div class="section-header"><span class="section-label">选择模型</span></div>
+    <div style="display:flex;gap:10px;margin-bottom:24px">
+      <div class="settings-provider-card" id="provider-card-claude" onclick="selectProvider('claude')">
+        <div class="settings-provider-icon" style="background:linear-gradient(135deg,#6c8ef5,#a78bfa);margin-bottom:10px">✦</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text)">Claude</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px">Anthropic</div>
+        <div class="settings-active-dot" id="provider-dot-claude"></div>
+      </div>
+      <div class="settings-provider-card" id="provider-card-deepseek" onclick="selectProvider('deepseek')">
+        <div class="settings-provider-icon" style="background:linear-gradient(135deg,#2dd4bf,#60a5fa);margin-bottom:10px">D</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text)">DeepSeek</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px">DeepSeek AI</div>
+        <div class="settings-active-dot" id="provider-dot-deepseek"></div>
+      </div>
+      <div class="settings-provider-card" id="provider-card-qwen" onclick="selectProvider('qwen')">
+        <div class="settings-provider-icon" style="background:linear-gradient(135deg,#f9a825,#fb923c);margin-bottom:10px">Q</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text)">通义千问</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px">阿里云</div>
+        <div class="settings-active-dot" id="provider-dot-qwen"></div>
+      </div>
+    </div>
+
+    <!-- 第二步：配置 Key -->
+    <div class="section-header"><span class="section-label">配置 API Key</span></div>
+    <div class="settings-card">
+      <div class="settings-provider" style="margin-bottom:10px">
+        <div id="settings-active-icon" class="settings-provider-icon" style="background:linear-gradient(135deg,#6c8ef5,#a78bfa)">✦</div>
+        <div class="settings-provider-info">
+          <div id="settings-active-name" class="settings-provider-name">Claude</div>
+          <div id="settings-active-desc" class="settings-provider-desc">sk-ant-api03-… 格式</div>
+        </div>
+        <div id="settings-key-status" class="settings-key-status empty">未配置</div>
+      </div>
+      <div class="settings-key-row">
+        <input type="password" id="active-api-key" class="settings-key-input" placeholder="粘贴 API Key…">
+        <button class="settings-eye-btn" onclick="toggleKeyVisibility('active-api-key',this)">
+          <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1 10s3.6-6 9-6 9 6 9 6-3.6 6-9 6-9-6-9-6z"/><circle cx="10" cy="10" r="2.5"/></svg>
+        </button>
+        <button class="btn btn-primary" style="padding:8px 22px;font-size:13px;flex-shrink:0" onclick="saveApiKey()">保存</button>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -595,10 +705,17 @@ hr{border:none;border-top:0.5px solid var(--border);margin:2rem 0}
         <div class="skill-detail-label">路径</div>
         <div class="skill-detail-path" id="sd-path"></div>
       </div>
+      <div class="skill-detail-section" id="sd-content-section" style="display:none">
+        <div class="skill-detail-label">技能内容</div>
+        <textarea id="sd-content" style="width:100%;min-height:220px;resize:vertical;font-size:12px;font-family:'SF Mono',Menlo,monospace;line-height:1.65;color:var(--text);background:var(--surface2);border:0.5px solid var(--border2);border-radius:10px;padding:12px 14px;outline:none;transition:border-color .18s" spellcheck="false"></textarea>
+      </div>
     </div>
     <div class="skill-modal-footer">
       <div class="skill-delete-area" id="sd-delete-area"></div>
-      <button class="btn btn-ghost" onclick="closeSkillDetail()">关闭</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" onclick="closeSkillDetail()">关闭</button>
+        <button class="btn btn-primary" id="sd-save-btn" style="display:none" onclick="saveSkillContent()">保存</button>
+      </div>
     </div>
   </div>
 </div>
@@ -629,6 +746,38 @@ function toast(msg,type=''){
   clearTimeout(toastTimer)
   requestAnimationFrame(()=>t.classList.add('show'))
   toastTimer=setTimeout(()=>t.classList.remove('show'),2400)
+  if(type==='success') playSfx('success')
+  else if(type==='danger') playSfx('danger')
+}
+
+function playSfx(type){
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)()
+    const g=ctx.createGain()
+    g.connect(ctx.destination)
+    if(type==='success'){
+      [[880,0,0.06],[1320,0.07,0.06],[1760,0.13,0.1]].forEach(([freq,when,dur])=>{
+        const o=ctx.createOscillator()
+        const og=ctx.createGain()
+        o.type='sine'; o.frequency.value=freq
+        og.gain.setValueAtTime(0.18,ctx.currentTime+when)
+        og.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+when+dur)
+        o.connect(og); og.connect(ctx.destination)
+        o.start(ctx.currentTime+when); o.stop(ctx.currentTime+when+dur+0.01)
+      })
+    } else {
+      [[440,0,0.06],[330,0.08,0.12]].forEach(([freq,when,dur])=>{
+        const o=ctx.createOscillator()
+        const og=ctx.createGain()
+        o.type='sine'; o.frequency.value=freq
+        og.gain.setValueAtTime(0.15,ctx.currentTime+when)
+        og.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+when+dur)
+        o.connect(og); og.connect(ctx.destination)
+        o.start(ctx.currentTime+when); o.stop(ctx.currentTime+when+dur+0.01)
+      })
+    }
+    setTimeout(()=>ctx.close(),600)
+  }catch(e){}
 }
 
 // ── Confirm ──
@@ -679,7 +828,7 @@ document.getElementById('create-skill-modal').onclick=function(e){if(e.target===
 
 // ── Skill detail modal ──
 let currentSkillId=null
-function openSkillDetail(skill){
+async function openSkillDetail(skill){
   currentSkillId=skill.id
   document.getElementById('sd-icon').textContent=skill.icon
   document.getElementById('sd-name').textContent=skill.name
@@ -696,6 +845,26 @@ function openSkillDetail(skill){
   document.getElementById('sd-delete-area').innerHTML=skill.deletable
     ?`<button class="btn btn-danger" onclick="doDeleteSkill()">删除技能</button>`
     :`<span class="skill-readonly-note">内置技能 · 只读</span>`
+
+  const isCustom = skill.type==='custom' && skill._path
+  const contentSection=document.getElementById('sd-content-section')
+  const saveBtn=document.getElementById('sd-save-btn')
+  const contentTa=document.getElementById('sd-content')
+  if(isCustom){
+    contentSection.style.display=''
+    saveBtn.style.display=''
+    window._currentSkillFilePath=skill._path.replace(/\/$/,'')+'/SKILL.md'
+    contentTa.value='加载中…'
+    try{
+      const raw=await invoke('read_file',{path:window._currentSkillFilePath})
+      contentTa.value=raw??''
+    }catch(e){contentTa.value='读取失败：'+e}
+  }else{
+    contentSection.style.display='none'
+    saveBtn.style.display='none'
+    window._currentSkillFilePath=null
+  }
+
   document.getElementById('skill-detail-modal').classList.add('show')
 }
 function closeSkillDetail(){document.getElementById('skill-detail-modal').classList.remove('show');currentSkillId=null}
@@ -712,9 +881,221 @@ document.getElementById('skill-detail-modal').onclick=function(e){if(e.target===
   </div>
 </div>
 
+<!-- Export sessions modal -->
+<div class="modal-bg" id="export-modal">
+  <div class="modal" style="width:400px">
+    <div class="modal-head">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:30px;height:30px;border-radius:9px;background:var(--accent-soft);border:0.5px solid rgba(108,142,245,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 1v8M4 6l3 3 3-3M2 10v1a1 1 0 001 1h8a1 1 0 001-1v-1"/></svg>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--text)">导出会话历史</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:1px">文件将保存到下载文件夹</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-body" style="padding:20px 22px;gap:18px">
+
+      <!-- 时间范围快捷选 -->
+      <div>
+        <div class="export-field-label">快捷范围</div>
+        <div class="export-range-pills">
+          <button class="range-pill active" id="range-pill-7" onclick="setExportRange(7,this)">最近 7 天</button>
+          <button class="range-pill" id="range-pill-30" onclick="setExportRange(30,this)">最近 30 天</button>
+          <button class="range-pill" id="range-pill-0" onclick="setExportRange(0,this)">全部</button>
+          <button class="range-pill" id="range-pill-custom" onclick="setExportRange(-1,this)">自定义</button>
+        </div>
+      </div>
+
+      <!-- 自定义日期 -->
+      <div id="export-date-row" style="display:none;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <div class="export-field-label">开始日期</div>
+          <input type="date" id="export-start" class="export-date-input">
+        </div>
+        <div>
+          <div class="export-field-label">结束日期</div>
+          <input type="date" id="export-end" class="export-date-input">
+        </div>
+      </div>
+
+      <!-- 导出内容 -->
+      <div>
+        <div class="export-field-label">导出内容</div>
+        <div style="display:flex;gap:8px">
+          <label class="export-fmt-card active" id="role-all" onclick="selectRole('all',this)">
+            <div style="font-size:15px">💬</div>
+            <div style="font-size:12px;font-weight:600;margin-top:2px">全部</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:1px">双方对话</div>
+          </label>
+          <label class="export-fmt-card" id="role-user" onclick="selectRole('user',this)">
+            <div style="font-size:15px">🙋</div>
+            <div style="font-size:12px;font-weight:600;margin-top:2px">我的消息</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:1px">仅我发送的</div>
+          </label>
+          <label class="export-fmt-card" id="role-assistant" onclick="selectRole('assistant',this)">
+            <div style="font-size:15px">✦</div>
+            <div style="font-size:12px;font-weight:600;margin-top:2px">Claude 回复</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:1px">仅 AI 回复</div>
+          </label>
+        </div>
+      </div>
+
+      <!-- 格式 -->
+      <div>
+        <div class="export-field-label">导出格式</div>
+        <div style="display:flex;gap:8px">
+          <label class="export-fmt-card active" id="fmt-json" onclick="selectFmt('json',this)">
+            <div style="font-size:15px">{ }</div>
+            <div style="font-size:12px;font-weight:600;margin-top:2px">JSON</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:1px">结构化数据</div>
+          </label>
+          <label class="export-fmt-card" id="fmt-md" onclick="selectFmt('md',this)">
+            <div style="font-size:15px">#</div>
+            <div style="font-size:12px;font-weight:600;margin-top:2px">Markdown</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:1px">可读文档</div>
+          </label>
+        </div>
+      </div>
+
+      <div id="export-hint" style="font-size:12px;color:var(--text3);background:var(--surface2);padding:8px 12px;border-radius:8px;border:0.5px solid var(--border)"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeExportModal()">取消</button>
+      <button class="btn btn-primary" onclick="doExport()" style="padding:6px 18px">
+        <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 1v8M4 6l3 3 3-3M2 10v1a1 1 0 001 1h8a1 1 0 001-1v-1"/></svg>
+        导出
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Summary modal -->
+<div class="modal-bg" id="summary-modal">
+  <div class="modal" id="summary-modal-inner" style="width:560px;max-height:88vh;display:flex;flex-direction:column">
+    <div class="modal-head">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:30px;height:30px;border-radius:9px;background:var(--purple-soft);border:0.5px solid rgba(167,139,250,0.25);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#7c3aed" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h10M2 7h7M2 10h5"/></svg>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--text)">一键总结</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:1px">根据会话历史生成工作总结</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-body" id="summary-modal-body" style="padding:20px 22px;gap:18px">
+
+      <!-- 时间范围 + 提示词（共用遮罩） -->
+      <div id="summary-content-wrap" style="position:relative;display:flex;flex-direction:column;gap:18px">
+
+        <!-- 时间范围 -->
+        <div id="summary-range-block">
+          <div class="export-field-label">时间范围</div>
+          <div class="export-range-pills">
+            <button class="range-pill active" id="sum-pill-0" onclick="setSummaryRange(0,this)">今日</button>
+            <button class="range-pill" id="sum-pill-7" onclick="setSummaryRange(7,this)">本周</button>
+            <button class="range-pill" id="sum-pill-14" onclick="setSummaryRange(14,this)">近两周</button>
+            <button class="range-pill" id="sum-pill-30" onclick="setSummaryRange(30,this)">本月</button>
+            <button class="range-pill" id="sum-pill-custom" onclick="setSummaryRange(-1,this)">自定义</button>
+          </div>
+        </div>
+
+        <!-- 自定义日期 -->
+        <div id="summary-date-row" style="display:none;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <div class="export-field-label">开始日期</div>
+            <input type="date" id="summary-start" class="export-date-input">
+          </div>
+          <div>
+            <div class="export-field-label">结束日期</div>
+            <input type="date" id="summary-end" class="export-date-input">
+          </div>
+        </div>
+
+        <!-- 项目筛选 -->
+        <div id="summary-project-block">
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:7px">
+            选择项目
+            <span style="font-weight:400;font-size:12px;color:var(--text3)">（不选则包含全部）</span>
+            <button id="sum-proj-toggle-all" onclick="toggleAllSummaryProjects()" style="margin-left:8px;font-size:11px;padding:2px 8px;border-radius:6px;border:0.5px solid var(--border2);background:var(--surface2);color:var(--text2);cursor:pointer">全选</button>
+          </div>
+          <div id="summary-project-list" style="display:flex;flex-wrap:wrap;gap:6px;max-height:96px;overflow-y:auto;padding:2px 0"></div>
+        </div>
+
+        <!-- 提示词 -->
+        <div id="summary-prompt-block" style="display:flex;flex-direction:column;flex:1">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
+            <div style="font-size:13px;font-weight:600;color:var(--text)">总结提示词 <span style="font-weight:400;font-size:12px;color:var(--text3)">（可选，告诉 AI 如何总结）</span></div>
+            <button id="summary-prompt-expand-btn" onclick="toggleSummaryPromptExpand()" title="展开/收起" style="width:26px;height:26px;border-radius:7px;border:0.5px solid var(--border2);background:var(--surface2);color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .18s">
+              <svg id="summary-prompt-expand-icon" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5V1h4M9 1h4v4M13 9v4H9M5 13H1V9"/></svg>
+            </button>
+          </div>
+          <textarea id="summary-prompt" rows="5" style="width:100%;padding:11px 13px;border:0.5px solid var(--border2);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;font-family:inherit;line-height:1.7;resize:none;outline:none;box-sizing:border-box;transition:border-color .18s,height .2s" placeholder="例如：请用中文生成一份工作周报，重点突出完成的功能和遇到的问题…" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor=''"></textarea>
+        </div>
+
+        <!-- 生成中遮罩 -->
+        <div id="summary-loading-mask" style="display:none;position:absolute;inset:0;border-radius:10px;background:rgba(255,255,255,0.75);backdrop-filter:blur(3px);align-items:center;justify-content:center;flex-direction:column;gap:10px">
+          <span class="spin-icon" style="font-size:26px;color:var(--accent)">⟳</span>
+          <span id="summary-loading-text" style="font-size:12px;color:var(--text2)">正在生成…</span>
+        </div>
+
+      </div>
+
+      <!-- API 未配置提示 -->
+      <div id="summary-api-hint" style="display:none;align-items:flex-start;gap:10px;background:var(--amber-soft);border:0.5px solid rgba(249,168,37,0.3);border-radius:10px;padding:12px 14px">
+        <div style="font-size:16px;flex-shrink:0">⚠️</div>
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:600;color:#92400e;margin-bottom:3px">当前模型未配置 API Key</div>
+          <div style="font-size:11px;color:#b45309;line-height:1.6">当前选择的模型 <span id="summary-api-hint-name" style="font-weight:600"></span> 尚未配置 API Key，请先在设置页面完成配置。</div>
+        </div>
+        <button class="btn btn-ghost" style="flex-shrink:0;font-size:11px;padding:4px 10px;color:#92400e;border-color:rgba(180,83,9,0.3)" onclick="closeSummaryModal();const nb=document.querySelector('.nav-item[onclick*=\'settings\']');if(nb)switchPage('settings',nb)">去设置</button>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeSummaryModal()">关闭</button>
+      <button class="btn" id="summary-generate-btn" style="gap:6px;background:var(--purple-soft);color:#7c3aed;border-color:rgba(167,139,250,0.3)" onclick="doSummary()">
+        <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h10M2 7h7M2 10h5"/></svg>
+        生成总结
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="summary-result-modal" style="z-index:300">
+  <div class="modal" style="width:620px;max-height:88vh">
+    <div class="modal-head">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:30px;height:30px;border-radius:9px;background:var(--green-soft);border:0.5px solid rgba(52,199,123,0.25);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#2a9d74" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h10M2 7h7M2 10h5"/></svg>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--text)">总结结果</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:1px">可直接复制使用</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-body" style="padding:20px 22px">
+      <textarea id="summary-result-text" style="width:100%;height:360px;padding:13px 14px;border:0.5px solid var(--border2);border-radius:10px;background:var(--surface2);color:var(--text);font-size:13px;font-family:inherit;line-height:1.75;resize:vertical;outline:none;box-sizing:border-box" readonly></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeSummaryResult()">关闭</button>
+      <button class="btn btn-primary" style="gap:6px" onclick="copySummaryResult()">
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="8" height="8" rx="1.5"/><path d="M2 10V2h8"/></svg>
+        一键复制
+      </button>
+    </div>
+  </div>
+</div>
+
 <script>
 function closeSessionDetail(){document.getElementById('session-detail-modal').classList.remove('show')}
 document.getElementById('session-detail-modal').onclick=function(e){if(e.target===this)closeSessionDetail()}
+document.getElementById('export-modal').onclick=function(e){if(e.target===this)closeExportModal()}
+document.getElementById('summary-modal').onclick=function(e){if(e.target===this)closeSummaryModal()}
+document.getElementById('summary-result-modal').onclick=function(e){if(e.target===this)closeSummaryResult()}
 </script>
 <script src="/main.js"></script>
 </body>

@@ -41,8 +41,10 @@ async function loadSkills() {
 
   const statEl = document.getElementById('stat-global-skills');
   const statProjEl = document.getElementById('stat-project-skills');
+  const statBuiltinEl = document.getElementById('stat-builtin-skills');
   if (statEl) statEl.textContent = global.length;
   if (statProjEl) statProjEl.textContent = project.length;
+  if (statBuiltinEl) statBuiltinEl.textContent = document.querySelectorAll('#skills-builtin-cards .card').length;
   const navBadgeSkills = document.getElementById('nav-badge-skills');
   if (navBadgeSkills) navBadgeSkills.textContent = global.length + project.length;
 
@@ -86,10 +88,28 @@ function skillCardHtml(s) {
     <div class="cmds">${cmds}</div>
     <div class="card-actions">
       <span class="click-hint" style="margin-top:0">点击查看详情 →</span>
-      <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteSkillDirect(this)">删除</button>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();editSkillDirect(this)">编辑</button>
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteSkillDirect(this)">删除</button>
+      </div>
     </div>
   </div>`;
 }
+
+window.editSkillDirect = async function(btn) {
+  const card = btn.closest('.card');
+  const s = JSON.parse(card.dataset.skill);
+  const filePath = s.path.replace(/\/$/, '') + '/SKILL.md';
+  const content = await invoke('read_file', { path: filePath }).catch(e => { toast('读取失败：' + e, 'danger'); return null; });
+  if (content === null) return;
+  _editSaveCallback = async (newContent) => {
+    await invoke('write_file', { path: filePath, content: newContent }).catch(e => { toast('保存失败：' + e, 'danger'); });
+    await loadSkills();
+  };
+  document.getElementById('edit-title').textContent = s.name;
+  document.getElementById('edit-textarea').value = content;
+  document.getElementById('edit-modal').classList.add('show');
+};
 
 window.deleteSkillDirect = function(btn) {
   const card = btn.closest('.card');
@@ -308,75 +328,606 @@ window.doDeleteMemFile = function(btn) {
 
 // ── 会话历史 ──
 
+let _sessionsData = [];
+let _sessionsActiveProject = '__all__';
+
+function sessionCardHtml(s) {
+  const projStyle = s.project
+    ? 'background:var(--purple-soft);color:#7c3aed;border:0.5px solid rgba(167,139,250,0.2)'
+    : 'background:var(--teal-soft);color:#0d9488;border:0.5px solid rgba(45,212,191,0.25)';
+  return `
+  <div class="session-item" id="sess-${escHtml(s.id)}" data-path="${escHtml(s.path)}" data-title="${escHtml(s.title)}" onclick="openSessionDetail(this)">
+    <div class="session-icon">💬</div>
+    <div class="session-body">
+      <div class="session-title">${escHtml(s.title)}</div>
+      <div class="session-meta">
+        <span class="session-project" style="${projStyle}">${escHtml(s.project) || '全局'}</span>
+        <span class="session-date">${escHtml(s.date)}</span>
+      </div>
+      <div class="session-preview">${escHtml(s.project_path)}</div>
+    </div>
+    <div class="session-tokens">
+      <div class="session-token-val">${fmtTokens(s.input_tokens + s.output_tokens)}</div>
+      <div class="session-token-label">tokens</div>
+    </div>
+    <div style="margin-left:8px;flex-shrink:0">
+      <button class="btn btn-danger btn-sm" onclick="doDeleteSession(this,event)">删除</button>
+    </div>
+  </div>`;
+}
+
+function renderSessionTabs(sessions) {
+  const tabsEl = document.getElementById('sessions-proj-tabs');
+  const container = document.getElementById('sessions-list');
+  if (!tabsEl || !container) return;
+
+  // 统计每个项目的会话数，按数量降序排列
+  const projMap = new Map();
+  for (const s of sessions) {
+    const key = s.project || '全局';
+    projMap.set(key, (projMap.get(key) || 0) + 1);
+  }
+  const projects = [...projMap.entries()].sort((a, b) => b[1] - a[1]);
+
+  // 确保当前选中的项目还存在，否则回到全部
+  const validKeys = new Set(['__all__', ...projects.map(p => p[0])]);
+  if (!validKeys.has(_sessionsActiveProject)) _sessionsActiveProject = '__all__';
+
+  // 渲染页签
+  tabsEl.innerHTML = [['__all__', sessions.length], ...projects].map(([key, count]) => {
+    const label = key === '__all__' ? '全部' : key;
+    const active = _sessionsActiveProject === key ? 'active' : '';
+    return `<button class="range-pill ${active}" onclick="switchSessionProject('${escHtml(key)}')">${escHtml(label)} <span style="opacity:.65;font-size:11px">${count}</span></button>`;
+  }).join('');
+
+  // 渲染当前页签的会话
+  const filtered = _sessionsActiveProject === '__all__'
+    ? sessions
+    : sessions.filter(s => (s.project || '全局') === _sessionsActiveProject);
+
+  container.innerHTML = filtered.length === 0
+    ? `<div style="padding:32px;text-align:center;color:var(--text3)">该项目下无会话记录</div>`
+    : filtered.map(sessionCardHtml).join('');
+}
+
+window.switchSessionProject = function(key) {
+  _sessionsActiveProject = key;
+  renderSessionTabs(_sessionsData);
+};
+
 async function loadSessions() {
   const sessions = await invoke('list_sessions').catch(() => []);
+  _sessionsData = sessions;
+  _sessionsActiveProject = '__all__';
+
+  const now = Date.now() / 1000;
+  const weekTokens = sessions
+    .filter(s => s.timestamp > now - 7 * 86400)
+    .reduce((a, s) => a + s.input_tokens + s.output_tokens, 0);
+  const activeProjects = new Set(sessions.map(s => s.project).filter(Boolean)).size;
 
   const statEl = document.getElementById('stat-sessions');
   const statWkEl = document.getElementById('stat-week-tokens');
   const statApEl = document.getElementById('stat-active-projects');
   if (statEl) statEl.textContent = sessions.length;
-
-  const now = Date.now() / 1000;
-  const weekSessions = sessions.filter(s => s.timestamp > now - 7 * 86400);
-  const weekTokens = weekSessions.reduce((a, s) => a + s.input_tokens + s.output_tokens, 0);
   if (statWkEl) statWkEl.textContent = fmtTokens(weekTokens);
-
-  const activeProjects = new Set(sessions.map(s => s.project).filter(Boolean)).size;
   if (statApEl) statApEl.textContent = activeProjects;
 
   const container = document.getElementById('sessions-list');
   if (!container) return;
 
   if (sessions.length === 0) {
+    document.getElementById('sessions-proj-tabs').innerHTML = '';
     container.innerHTML = `<div style="padding:32px;text-align:center;color:var(--text3)">无会话记录<br><small>~/.claude/projects/ 下未找到含 token 数据的 JSONL 文件</small></div>`;
     return;
   }
 
-  container.innerHTML = sessions.map(s => {
-    const projStyle = s.project
-      ? 'background:var(--purple-soft);color:#7c3aed;border:0.5px solid rgba(167,139,250,0.2)'
-      : 'background:var(--teal-soft);color:#0d9488;border:0.5px solid rgba(45,212,191,0.25)';
-    const safeId = escHtml(s.id);
-    const safePath = escHtml(s.path);
-    return `
-    <div class="session-item" id="sess-${safeId}" data-path="${safePath}" data-title="${escHtml(s.title)}" onclick="openSessionDetail(this)">
-      <div class="session-icon">💬</div>
-      <div class="session-body">
-        <div class="session-title">${escHtml(s.title)}</div>
-        <div class="session-meta">
-          <span class="session-project" style="${projStyle}">${escHtml(s.project) || '全局'}</span>
-          <span class="session-date">${escHtml(s.date)}</span>
-        </div>
-        <div class="session-preview">${escHtml(s.project_path)}</div>
-      </div>
-      <div class="session-tokens">
-        <div class="session-token-val">${fmtTokens(s.input_tokens + s.output_tokens)}</div>
-        <div class="session-token-label">tokens</div>
-      </div>
-      <div style="margin-left:8px;flex-shrink:0">
-        <button class="btn btn-danger btn-sm" onclick="doDeleteSession(this,event)">删除</button>
-      </div>
-    </div>`;
-  }).join('');
+  renderSessionTabs(sessions);
 }
 
 window.doDeleteSession = function(btn, e) {
   if (e) { e.stopPropagation(); e.preventDefault(); }
   const el = btn.closest('.session-item');
   const path = el.dataset.path;
-  const elId = el.id;
   showConfirm('确认删除', '删除此会话记录？此操作不可撤销。', '确认删除', async () => {
     await invoke('delete_session', { path }).catch(err => { alert(err); return; });
-    const target = document.getElementById(elId);
-    if (target) { target.classList.add('deleted'); setTimeout(() => target.remove(), 300); }
+    _sessionsData = _sessionsData.filter(s => s.path !== path);
+    renderSessionTabs(_sessionsData);
     toast('会话已删除', 'success');
   });
 };
 
+// ── 导出会话 ──
+
+let _exportFmt = 'json';
+let _exportRole = 'all';
+
+window.openExportModal = function() {
+  _exportFmt = 'json';
+  _exportRole = 'all';
+  document.querySelectorAll('.export-fmt-card').forEach(c => c.classList.remove('active'));
+  document.getElementById('fmt-json')?.classList.add('active');
+  document.getElementById('role-all')?.classList.add('active');
+  setExportRange(7, document.getElementById('range-pill-7'));
+  document.getElementById('export-modal').classList.add('show');
+};
+
+window.closeExportModal = function() {
+  document.getElementById('export-modal').classList.remove('show');
+};
+
+window.setExportRange = function(days, btn) {
+  document.querySelectorAll('.range-pill').forEach(p => p.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const today = new Date();
+  const fmt = d => d.toISOString().slice(0, 10);
+  const dateRow = document.getElementById('export-date-row');
+  if (days === -1) {
+    dateRow.style.display = 'grid';
+    updateExportHint();
+    return;
+  }
+  dateRow.style.display = 'none';
+  if (days === 0) {
+    document.getElementById('export-start').value = '2020-01-01';
+  } else {
+    const from = new Date(today); from.setDate(today.getDate() - days);
+    document.getElementById('export-start').value = fmt(from);
+  }
+  document.getElementById('export-end').value = fmt(today);
+  updateExportHint();
+};
+
+window.selectFmt = function(fmt, card) {
+  _exportFmt = fmt;
+  document.querySelectorAll('#fmt-json,#fmt-md').forEach(c => c.classList.remove('active'));
+  card.classList.add('active');
+};
+
+window.selectRole = function(role, card) {
+  _exportRole = role;
+  document.querySelectorAll('#role-all,#role-user,#role-assistant').forEach(c => c.classList.remove('active'));
+  card.classList.add('active');
+};
+
+function updateExportHint() {
+  const hint = document.getElementById('export-hint');
+  if (!hint) return;
+  const start = document.getElementById('export-start').value;
+  const end = document.getElementById('export-end').value;
+  if (start && end) hint.textContent = `将导出 ${start} 至 ${end} 的会话记录`;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  ['export-start', 'export-end'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', updateExportHint);
+  });
+});
+
+window.doExport = async function() {
+  const start = document.getElementById('export-start').value;
+  const end = document.getElementById('export-end').value;
+  if (!start || !end) { toast('请选择时间范围', 'danger'); return; }
+  const startTs = Math.floor(new Date(start).getTime() / 1000);
+  const endTs = Math.floor(new Date(end + 'T23:59:59').getTime() / 1000);
+  const fmt = _exportFmt || 'json';
+
+  const role = _exportRole || 'all';
+  let rawSessions = await invoke('export_sessions', { startTs, endTs }).catch(e => { toast('导出失败：' + e, 'danger'); return null; });
+  if (!rawSessions) return;
+  if (rawSessions.length === 0) { toast('该时间段内无会话记录', 'danger'); return; }
+
+  const sessions = rawSessions.map(s => ({
+    ...s,
+    messages: role === 'all' ? s.messages : s.messages.filter(m => m.role === role),
+  })).filter(s => s.messages.length > 0);
+
+  if (sessions.length === 0) { toast('过滤后无可导出的消息', 'danger'); return; }
+
+  const roleSuffix = role === 'user' ? '-user' : role === 'assistant' ? '-claude' : '';
+  let content, filename, mime;
+  if (fmt === 'json') {
+    content = JSON.stringify(sessions, null, 2);
+    filename = `claude-sessions-${start}-${end}${roleSuffix}.json`;
+    mime = 'application/json';
+  } else {
+    const roleLabel = { user: '用户', assistant: 'Claude' };
+    content = sessions.map(s => {
+      const msgs = s.messages.map(m => `**${roleLabel[m.role] || m.role}**\n\n${m.text}`).join('\n\n---\n\n');
+      return `# ${s.title}\n\n**项目:** ${s.project || '全局'}  \n**时间:** ${s.date}  \n**Tokens:** ${s.input_tokens + s.output_tokens}\n\n${msgs}`;
+    }).join('\n\n---\n\n');
+    filename = `claude-sessions-${start}-${end}${roleSuffix}.md`;
+    mime = 'text/markdown';
+  }
+
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+  closeExportModal();
+  toast(`已导出 ${sessions.length} 条会话`, 'success');
+};
+
+// ── 一键总结 ──
+
+const DEFAULT_SUMMARY_PROMPT = `# 智能生成
+
+深度理解业务背景，用自己的话总结修改了哪些功能点。
+
+## 收集信息（按顺序执行）
+
+1. **深度读代码**
+   - 对每个改动文件，Read 关键函数/逻辑段，理解改动的真实意图
+   - 不只看 diff，要理解上下文：这段代码原来是干什么的，改动后行为发生了什么变化
+2. **理解业务背景**
+   - 结合 commit message、AI 标记注释、函数名、变量名，推断业务场景
+
+## 输出格式要求
+
+- **不要大标题和小标题**
+- **不区分已提交 / 未提交**
+- **不统计工时或小时数**
+- **最少 3 条，最多 5 条**，每条聚焦一个独立功能主题，改动较多时合并同类项而非无限拆分
+- 每条格式：\`**功能点名称**：具体说明修改了什么，改动了哪些行为或交互\`
+- 用词要体现理解深度，不能只是 commit message 的复述`;
+
+let _summaryStart = '';
+let _summaryEnd = '';
+
+let _summaryPromptTimer = null;
+async function saveSummaryPrompt(value) {
+  const path = await getConfigPath();
+  const raw = await invoke('read_file', { path }).catch(() => null);
+  const cfg = raw ? JSON.parse(raw) : {};
+  cfg.summary_prompt = value;
+  window._settingsCfg = cfg;
+  await invoke('write_file', { path, content: JSON.stringify(cfg, null, 2) }).catch(() => {});
+}
+
+let _summarySelectedProjects = new Set();
+
+window.toggleSummaryProject = function(name, el) {
+  if (_summarySelectedProjects.has(name)) {
+    _summarySelectedProjects.delete(name);
+    el.classList.remove('active');
+  } else {
+    _summarySelectedProjects.add(name);
+    el.classList.add('active');
+  }
+};
+
+window.toggleAllSummaryProjects = function() {
+  const chips = document.querySelectorAll('#summary-project-list .sum-proj-chip');
+  const allSelected = chips.length > 0 && [...chips].every(c => c.classList.contains('active'));
+  if (allSelected) {
+    _summarySelectedProjects.clear();
+    chips.forEach(c => c.classList.remove('active'));
+    document.getElementById('sum-proj-toggle-all').textContent = '全选';
+  } else {
+    chips.forEach(c => {
+      _summarySelectedProjects.add(c.dataset.name);
+      c.classList.add('active');
+    });
+    document.getElementById('sum-proj-toggle-all').textContent = '取消全选';
+  }
+};
+
+let _promptExpanded = false;
+window.toggleSummaryPromptExpand = function() {
+  _promptExpanded = !_promptExpanded;
+  const ta = document.getElementById('summary-prompt');
+  const icon = document.getElementById('summary-prompt-expand-icon');
+  const btn = document.getElementById('summary-prompt-expand-btn');
+  const rangeBlock = document.getElementById('summary-range-block');
+  const dateRow = document.getElementById('summary-date-row');
+  const projBlock = document.getElementById('summary-project-block');
+
+  if (_promptExpanded) {
+    rangeBlock.style.display = 'none';
+    dateRow.style.display = 'none';
+    projBlock.style.display = 'none';
+    ta.rows = 20;
+    icon.innerHTML = '<path d="M5 1H1v4M13 5V1H9M9 13h4V9M1 9v4h4"/>';
+    btn.style.background = 'var(--accent-soft)';
+    btn.style.borderColor = 'var(--accent)';
+    btn.style.color = 'var(--accent)';
+  } else {
+    rangeBlock.style.display = '';
+    projBlock.style.display = '';
+    ta.rows = 5;
+    // dateRow 由 setSummaryRange 控制，收起时不强制显示
+    icon.innerHTML = '<path d="M1 5V1h4M9 1h4v4M13 9v4H9M5 13H1V9"/>';
+    btn.style.background = '';
+    btn.style.borderColor = '';
+    btn.style.color = '';
+  }
+};
+
+window.openSummaryModal = async function() {
+  _promptExpanded = false;
+  document.getElementById('summary-prompt').rows = 5;
+  document.getElementById('summary-range-block').style.display = '';
+  document.getElementById('summary-project-block').style.display = '';
+  document.getElementById('summary-date-row').style.display = 'none';
+  document.getElementById('summary-prompt-expand-icon').innerHTML = '<path d="M1 5V1h4M9 1h4v4M13 9v4H9M5 13H1V9"/>';
+  const btn = document.getElementById('summary-prompt-expand-btn');
+  btn.style.background = btn.style.borderColor = btn.style.color = '';
+  setSummaryRange(0, document.getElementById('sum-pill-0'));
+  document.getElementById('summary-loading-mask').style.display = 'none';
+  document.getElementById('summary-modal').classList.add('show');
+
+  const path = await getConfigPath();
+  const raw = await invoke('read_file', { path }).catch(() => null);
+  const cfg = raw ? JSON.parse(raw) : {};
+
+  const promptEl = document.getElementById('summary-prompt');
+  promptEl.value = cfg.summary_prompt || DEFAULT_SUMMARY_PROMPT;
+  if (!promptEl._bound) {
+    promptEl._bound = true;
+    promptEl.addEventListener('input', () => {
+      clearTimeout(_summaryPromptTimer);
+      _summaryPromptTimer = setTimeout(() => saveSummaryPrompt(promptEl.value.trim()), 600);
+    });
+  }
+
+  // 加载项目列表
+  _summarySelectedProjects.clear();
+  const allProjects = await invoke('list_project_paths').catch(() => []);
+  const uniqueProjects = [...new Map(allProjects.map(p => [p.name, p])).values()];
+  const listEl = document.getElementById('summary-project-list');
+  listEl.innerHTML = uniqueProjects.length === 0
+    ? '<span style="font-size:12px;color:var(--text3)">暂无项目</span>'
+    : uniqueProjects.map(p => `<button class="sum-proj-chip range-pill" data-name="${escHtml(p.name)}" onclick="toggleSummaryProject('${escHtml(p.name)}',this)">${escHtml(p.name)}</button>`).join('');
+  document.getElementById('sum-proj-toggle-all').textContent = '全选';
+
+  const active = cfg.active_provider || 'claude';
+  const hasKey = !!(cfg[PROVIDERS[active].key]);
+  if (!hasKey) {
+    document.getElementById('summary-api-hint-name').textContent = PROVIDERS[active].name;
+  }
+  document.getElementById('summary-api-hint').style.display = hasKey ? 'none' : 'flex';
+  document.getElementById('summary-generate-btn').disabled = !hasKey;
+  document.getElementById('summary-generate-btn').style.opacity = hasKey ? '' : '0.45';
+};
+
+window.closeSummaryModal = function() {
+  document.getElementById('summary-modal').classList.remove('show');
+};
+
+window.setSummaryRange = function(days, btn) {
+  document.querySelectorAll('#sum-pill-0,#sum-pill-7,#sum-pill-14,#sum-pill-30,#sum-pill-custom').forEach(p => p.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const today = new Date();
+  // 用本地时间格式化，避免 toISOString() 返回 UTC 日期导致跨时区偏移
+  const fmtLocal = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const dateRow = document.getElementById('summary-date-row');
+  if (days === -1) {
+    dateRow.style.display = 'grid';
+    return;
+  }
+  dateRow.style.display = 'none';
+  const from = new Date(today); if (days > 0) from.setDate(today.getDate() - days);
+  _summaryStart = fmtLocal(from);
+  _summaryEnd = fmtLocal(today);
+  document.getElementById('summary-start').value = _summaryStart;
+  document.getElementById('summary-end').value = _summaryEnd;
+};
+
+window.doSummary = async function() {
+  const start = document.getElementById('summary-start').value || _summaryStart;
+  const end = document.getElementById('summary-end').value || _summaryEnd;
+  if (!start || !end) { toast('请先选择时间范围', 'danger'); return; }
+  const userPrompt = document.getElementById('summary-prompt').value.trim();
+
+  // 用本地时间解析日期，避免 UTC 时区偏差漏掉当天 0-8 点的会话
+  const startTs = Math.floor(new Date(start + 'T00:00:00').getTime() / 1000);
+  const endTs   = Math.floor(new Date(end   + 'T23:59:59').getTime() / 1000);
+
+  // 读取 API 配置
+  const cfgPath = await getConfigPath();
+  const cfgRaw = await invoke('read_file', { path: cfgPath }).catch(() => null);
+  const cfg = cfgRaw ? JSON.parse(cfgRaw) : {};
+  const provider = cfg.active_provider || 'claude';
+  const providerInfo = PROVIDERS[provider];
+  const apiKey = cfg[providerInfo.key] || '';
+  if (!apiKey) { toast('请先在设置页配置 API Key', 'danger'); return; }
+
+  const genBtn = document.getElementById('summary-generate-btn');
+  const mask = document.getElementById('summary-loading-mask');
+  const maskText = document.getElementById('summary-loading-text');
+  const showMask = (text) => { mask.style.display = 'flex'; maskText.textContent = text; };
+  const hideMask = () => { mask.style.display = 'none'; };
+  const resetBtn = () => {
+    genBtn.disabled = false;
+    genBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h10M2 7h7M2 10h5"/></svg> 生成总结';
+  };
+
+  genBtn.disabled = true;
+  genBtn.innerHTML = '<span class="spin-icon">⟳</span> 生成中…';
+  showMask('正在读取会话数据…');
+
+  try {
+    // 1. 拉取时间范围内的会话（含完整对话消息）
+    let sessions = await invoke('export_sessions', { startTs, endTs }).catch(() => []);
+
+    // 2. 按选中项目过滤（未选 = 全部）
+    if (_summarySelectedProjects.size > 0) {
+      sessions = sessions.filter(s => _summarySelectedProjects.has(s.project));
+    }
+
+    // 3. 过滤掉没有消息内容的会话
+    sessions = sessions.filter(s => s.messages && s.messages.length > 0);
+
+    if (sessions.length === 0) {
+      hideMask();
+      toast('该时间段内无会话记录', 'danger');
+      resetBtn();
+      return;
+    }
+
+    const totalTokens = sessions.reduce((a, s) => a + s.input_tokens + s.output_tokens, 0);
+    const projects    = [...new Set(sessions.map(s => s.project).filter(Boolean))];
+    const msgCount    = sessions.reduce((a, s) => a + s.messages.length, 0);
+
+    showMask(`正在调用 ${providerInfo.name} 生成总结（${sessions.length} 条会话）…`);
+
+    // 4. 按模型上下文规格填满内容，优先 token 最多的会话，不跳过任何会话
+    // 每个模型预留 2000 字符给 systemInstruction + metadata，剩余全部给会话内容
+    const MODEL_LIMITS = { claude: 120000, deepseek: 50000, qwen: 80000 };
+    const BUDGET = (MODEL_LIMITS[provider] || 60000);
+
+    // 按 token 量从多到少排序，内容最多的优先获得更大空间
+    const ranked = [...sessions].sort((a, b) =>
+      (b.input_tokens + b.output_tokens) - (a.input_tokens + a.output_tokens)
+    );
+
+    let remaining = BUDGET;
+    const included = [];
+
+    for (const s of ranked) {
+      if (remaining <= 0) break;
+      const header = `【${s.date}】[${s.project || '未知项目'}] ${s.title}\n`;
+      const msgs = s.messages
+        .map(m => `[${m.role === 'user' ? '用户' : 'AI'}] ${m.text.trim()}`)
+        .join('\n');
+
+      // 该会话可用的字符预算（header 也算在内）
+      const sessionBudget = remaining - header.length;
+      if (sessionBudget <= 0) break;
+
+      let body;
+      if (msgs.length <= sessionBudget) {
+        body = msgs;
+      } else {
+        // 内容超出预算：截取到预算上限，保证内容是满的
+        body = msgs.slice(0, sessionBudget - 6) + '\n…';
+      }
+
+      const block = header + body;
+      included.push({ s, block });
+      remaining -= block.length;
+    }
+
+    // 输出时按日期升序排列，保持时间脉络
+    included.sort((a, b) => a.s.date.localeCompare(b.s.date));
+    const sessionBlocks = included.map(x => x.block);
+    const omitted = sessions.length - included.length;
+    if (omitted > 0) sessionBlocks.push(`\n…（另有 ${omitted} 条会话因超出模型上下文上限已省略）`);
+
+    // 5. 系统指令 + 用户数据分离
+    const systemInstruction = userPrompt ||
+      '你是一个工作助手，请根据用户提供的 AI 对话记录，生成一份简洁的工作总结，' +
+      '重点列出完成的工作内容、涉及的项目和技术点，语言简洁专业。';
+
+    const userContent =
+      `时间范围：${start} 至 ${end}\n` +
+      `会话数：${sessions.length}，消息数：${msgCount}，累计 Token：${fmtTokens(totalTokens)}\n` +
+      `涉及项目：${projects.length ? projects.join('、') : '无'}\n\n` +
+      `以下是会话对话记录：\n\n` +
+      sessionBlocks.join('\n\n---\n\n');
+
+    // 6. 调用对应 API
+    let resultText = '';
+
+    if (provider === 'claude') {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 2048,
+          system: systemInstruction,
+          messages: [{ role: 'user', content: userContent }],
+        }),
+      });
+      if (res.status === 401 || res.status === 403) throw new Error('API Key 无效，请在设置页重新配置');
+      if (!res.ok) throw new Error(`API 请求失败（${res.status}）`);
+      const data = await res.json();
+      resultText = data.content?.[0]?.text || '';
+    } else {
+      const endpoint = provider === 'deepseek'
+        ? 'https://api.deepseek.com/v1/chat/completions'
+        : 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+      const model = provider === 'deepseek' ? 'deepseek-chat' : 'qwen-plus';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + apiKey, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          max_tokens: 2048,
+          messages: [
+            { role: 'system', content: systemInstruction },
+            { role: 'user',   content: userContent },
+          ],
+        }),
+      });
+      if (res.status === 401 || res.status === 403) throw new Error('API Key 无效，请在设置页重新配置');
+      if (!res.ok) throw new Error(`API 请求失败（${res.status}）`);
+      const data = await res.json();
+      resultText = data.choices?.[0]?.message?.content || '';
+    }
+
+    if (!resultText) throw new Error('模型返回内容为空');
+
+    hideMask();
+    openSummaryResult(resultText);
+    toast('总结已生成', 'success');
+  } catch (e) {
+    hideMask();
+    toast('生成失败：' + e.message, 'danger');
+  } finally {
+    resetBtn();
+  }
+};
+
+window.openSummaryResult = function(text) {
+  document.getElementById('summary-result-text').value = text;
+  document.getElementById('summary-result-modal').classList.add('show');
+};
+
+window.closeSummaryResult = function() {
+  document.getElementById('summary-result-modal').classList.remove('show');
+};
+
+window.copySummaryResult = async function() {
+  const text = document.getElementById('summary-result-text').value;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('已复制到剪贴板', 'success');
+  } catch {
+    document.getElementById('summary-result-text').select();
+    document.execCommand('copy');
+    toast('已复制到剪贴板', 'success');
+  }
+};
+
 // ── 使用统计 ──
 
+const MODEL_COLORS = [
+  '#6c8ef5','#a78bfa','#2dd4bf','#52c79b','#f9a825',
+  '#f87171','#60a5fa','#fb923c','#e879f9','#34d399',
+];
+
+function modelColor(model, allModels) {
+  const idx = allModels.indexOf(model);
+  return MODEL_COLORS[idx % MODEL_COLORS.length];
+}
+
+function shortModelName(model) {
+  return model
+    .replace('claude-', '')
+    .replace(/-\d{8,}$/, '')
+    .replace('20251001', '');
+}
+
 async function loadStats() {
-  const stats = await invoke('get_stats').catch(() => ({ daily: [], projects: [], total_input: 0, total_output: 0, session_count: 0 }));
+  const stats = await invoke('get_stats').catch(() => ({ daily: [], projects: [], total_input: 0, total_output: 0, session_count: 0, model_totals: {} }));
 
   const totalTokens = stats.total_input + stats.total_output;
   const avg = stats.session_count > 0 ? Math.round(totalTokens / stats.session_count) : 0;
@@ -392,11 +943,17 @@ async function loadStats() {
     if (el) el.textContent = val;
   });
 
-  renderBarChart(stats.daily);
+  const allModels = Object.entries(stats.model_totals || {})
+    .sort((a, b) => b[1] - a[1])
+    .map(([m]) => m);
+
+  renderBarChart(stats.daily, allModels);
+  renderModelLegend(allModels, stats.model_totals || {});
   renderProjTable(stats.projects, totalTokens);
+  renderModelTable(stats.model_totals || {}, allModels);
 }
 
-function renderBarChart(daily) {
+function renderBarChart(daily, allModels) {
   const container = document.getElementById('stats-bar-chart');
   if (!container) return;
   if (daily.length === 0) {
@@ -407,12 +964,62 @@ function renderBarChart(daily) {
   container.innerHTML = daily.map(d => {
     const total = d.input_tokens + d.output_tokens;
     const pct = Math.max((total / maxVal) * 100, 3);
+    const models = d.models || {};
+    const segments = allModels
+      .filter(m => models[m])
+      .map(m => {
+        const segPct = (models[m] / total) * 100;
+        return `<div class="bar-segment" style="height:${segPct}%;background:${modelColor(m, allModels)}" title="${shortModelName(m)}: ${fmtTokens(models[m])}"></div>`;
+      }).join('');
     return `
     <div class="bar-col">
       <div class="bar-val">${fmtTokens(total)}</div>
-      <div class="bar-area"><div class="bar" style="height:${pct}%"></div></div>
+      <div class="bar-area"><div class="bar-stack" style="height:${pct}%">${segments}</div></div>
       <div class="bar-label">${d.date.slice(-5)}</div>
     </div>`;
+  }).join('');
+}
+
+function renderModelLegend(allModels, modelTotals) {
+  const el = document.getElementById('model-legend');
+  if (!el) return;
+  if (allModels.length === 0) { el.innerHTML = ''; return; }
+  el.innerHTML = allModels.map(m => `
+    <div class="legend-item">
+      <div class="legend-dot" style="background:${modelColor(m, allModels)}"></div>
+      <span>${shortModelName(m)}</span>
+      <span style="color:var(--text3)">${fmtTokens(modelTotals[m])}</span>
+    </div>`).join('');
+}
+
+window.switchStatsTab = function(tab) {
+  document.getElementById('stats-panel-proj').style.display = tab === 'proj' ? '' : 'none';
+  document.getElementById('stats-panel-model').style.display = tab === 'model' ? '' : 'none';
+  document.getElementById('stats-tab-proj').classList.toggle('active', tab === 'proj');
+  document.getElementById('stats-tab-model').classList.toggle('active', tab === 'model');
+};
+
+function renderModelTable(modelTotals, allModels) {
+  const tbody = document.getElementById('stats-model-tbody');
+  if (!tbody) return;
+  const total = Object.values(modelTotals).reduce((a, b) => a + b, 0);
+  if (allModels.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:20px">暂无数据</td></tr>';
+    return;
+  }
+  tbody.innerHTML = allModels.map((m, i) => {
+    const tokens = modelTotals[m] || 0;
+    const pct = total > 0 ? Math.round((tokens / total) * 100) : 0;
+    const color = modelColor(m, allModels);
+    return `
+    <tr>
+      <td style="display:flex;align-items:center;gap:8px">
+        <span style="width:8px;height:8px;border-radius:2px;background:${color};flex-shrink:0;display:inline-block"></span>
+        ${escHtml(shortModelName(m))}
+      </td>
+      <td>${fmtTokens(tokens)}</td>
+      <td><div class="progress-wrap"><div class="progress-bg"><div class="progress-fill" style="width:${pct}%;background:${color}"></div></div><span class="progress-pct">${pct}%</span></div></td>
+    </tr>`;
   }).join('');
 }
 
@@ -476,7 +1083,7 @@ async function loadCache() {
 window.clearCache = function(id) {
   const card = document.getElementById(id);
   if (!card || !card.dataset.path) return;
-  doClearCache(id, card.dataset.path);
+  showConfirm('确认清除', `确定要清除该缓存吗？此操作不可撤销。`, '确认清除', () => doClearCache(id, card.dataset.path));
 };
 
 async function doClearCache(id, path) {
@@ -493,13 +1100,15 @@ async function doClearCache(id, path) {
   toast('已清除', 'success');
 }
 
-window.clearAll = async function() {
-  const items = await invoke('get_cache_info').catch(() => []);
-  for (const item of items) {
-    if (item.exists) await invoke('clear_cache', { path: item.path }).catch(() => {});
-  }
-  await loadCache();
-  toast('全部缓存已清除', 'success');
+window.clearAll = function() {
+  showConfirm('确认清除全部', '确定要清除全部缓存吗？此操作不可撤销。', '全部清除', async () => {
+    const items = await invoke('get_cache_info').catch(() => []);
+    for (const item of items) {
+      if (item.exists) await invoke('clear_cache', { path: item.path }).catch(() => {});
+    }
+    await loadCache();
+    toast('全部缓存已清除', 'success');
+  });
 };
 
 // ── Edit modal save callback ──
@@ -514,6 +1123,44 @@ window.saveEdit = async function() {
   }
   document.getElementById('edit-modal').classList.remove('show');
   _editSaveCallback = null;
+};
+
+// ── 编辑技能 ──
+
+window.doEditSkill = async function() {
+  const dirPath = window._currentSkillPath;
+  if (!dirPath) return;
+  const filePath = dirPath.replace(/\/$/, '') + '/SKILL.md';
+  const content = await invoke('read_file', { path: filePath }).catch(e => { toast('读取失败：' + e, 'danger'); return null; });
+  if (content === null) return;
+  _editSaveCallback = async (newContent) => {
+    await invoke('write_file', { path: filePath, content: newContent }).catch(e => { toast('保存失败：' + e, 'danger'); });
+    await loadSkills();
+  };
+  document.getElementById('skill-detail-modal').classList.remove('show');
+  document.getElementById('edit-title').textContent = window._currentSkillName;
+  document.getElementById('edit-textarea').value = content;
+  document.getElementById('edit-modal').classList.add('show');
+};
+
+// ── 保存技能内容 ──
+
+window.saveSkillContent = async function() {
+  const path = window._currentSkillFilePath;
+  if (!path) return;
+  const content = document.getElementById('sd-content').value;
+  const btn = document.getElementById('sd-save-btn');
+  btn.disabled = true;
+  btn.textContent = '保存中…';
+  try {
+    await invoke('write_file', { path, content });
+    toast('已保存', 'success');
+    await loadSkills();
+  } catch(e) {
+    toast('保存失败：' + e, 'danger');
+  }
+  btn.disabled = false;
+  btn.textContent = '保存';
 };
 
 // ── 删除技能 ──
@@ -623,6 +1270,161 @@ window.expandMsg = function(i) {
 
 // ── Init ──
 
+// ── 设置 ──
+
+const PROVIDERS = {
+  claude:   { name: 'Claude',    desc: 'Anthropic',   icon: '✦', bg: 'linear-gradient(135deg,#6c8ef5,#a78bfa)', key: 'claude_api_key' },
+  deepseek: { name: 'DeepSeek',  desc: 'DeepSeek AI', icon: 'D',  bg: 'linear-gradient(135deg,#2dd4bf,#60a5fa)', key: 'deepseek_api_key' },
+  qwen:     { name: '通义千问',   desc: '阿里云',       icon: 'Q',  bg: 'linear-gradient(135deg,#f9a825,#fb923c)', key: 'qwen_api_key' },
+};
+
+let _activeProvider = 'claude';
+
+async function getConfigPath() {
+  return invoke('get_config_path');
+}
+
+async function loadSettings() {
+  const path = await getConfigPath();
+  const raw = await invoke('read_file', { path }).catch(() => null);
+  const cfg = raw ? JSON.parse(raw) : {};
+  window._settingsCfg = cfg;
+  const active = cfg.active_provider || 'claude';
+  selectProvider(active, false);
+}
+
+window.selectProvider = function(provider, save = true) {
+  _activeProvider = provider;
+  const p = PROVIDERS[provider];
+  document.querySelectorAll('.settings-provider-card').forEach(c => c.classList.remove('active'));
+  document.getElementById('provider-card-' + provider)?.classList.add('active');
+  document.getElementById('settings-active-icon').style.background = p.bg;
+  document.getElementById('settings-active-icon').textContent = p.icon;
+  document.getElementById('settings-active-name').textContent = p.name;
+  document.getElementById('settings-active-desc').textContent = p.desc;
+  const cfg = window._settingsCfg || {};
+  const key = cfg[p.key] || '';
+  document.getElementById('active-api-key').value = key;
+  document.getElementById('active-api-key').type = 'password';
+  const statusEl = document.getElementById('settings-key-status');
+  statusEl.className = 'settings-key-status ' + (key ? 'configured' : 'empty');
+  statusEl.textContent = key ? '已配置' : '未配置';
+  if (save) {
+    saveActiveProvider(provider);
+    toast(`已选择 ${p.name}`, 'success');
+  }
+};
+
+async function saveActiveProvider(provider) {
+  const path = await getConfigPath();
+  const raw = await invoke('read_file', { path }).catch(() => null);
+  const cfg = raw ? JSON.parse(raw) : {};
+  cfg.active_provider = provider;
+  window._settingsCfg = cfg;
+  await invoke('write_file', { path, content: JSON.stringify(cfg, null, 2) }).catch(() => {});
+}
+
+async function testApiKey(provider, key) {
+  if (provider === 'claude') {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    if (res.status === 401 || res.status === 403) throw new Error('Key 无效');
+    if (!res.ok && res.status !== 400) throw new Error('请求失败 ' + res.status);
+    return true;
+  }
+  if (provider === 'deepseek') {
+    const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + key, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'deepseek-chat', max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    if (res.status === 401 || res.status === 403) throw new Error('Key 无效');
+    if (!res.ok && res.status !== 400) throw new Error('请求失败 ' + res.status);
+    return true;
+  }
+  if (provider === 'qwen') {
+    const res = await fetch('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + key, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'qwen-turbo', max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    if (res.status === 401 || res.status === 403) throw new Error('Key 无效');
+    if (!res.ok && res.status !== 400) throw new Error('请求失败 ' + res.status);
+    return true;
+  }
+}
+
+window.saveApiKey = async function() {
+  const key = document.getElementById('active-api-key').value.trim();
+  if (!key) { toast('请输入 API Key', 'danger'); return; }
+
+  const saveBtn = document.querySelector('.settings-key-row .btn-primary');
+  const statusEl = document.getElementById('settings-key-status');
+  saveBtn.textContent = '验证中…'; saveBtn.disabled = true;
+  statusEl.className = 'settings-key-status empty'; statusEl.textContent = '验证中…';
+
+  try {
+    await testApiKey(_activeProvider, key);
+  } catch (e) {
+    saveBtn.textContent = '保存'; saveBtn.disabled = false;
+    statusEl.className = 'settings-key-status empty'; statusEl.textContent = '未配置';
+    toast('验证失败：' + e.message, 'danger');
+    return;
+  }
+
+  const path = await getConfigPath();
+  const raw = await invoke('read_file', { path }).catch(() => null);
+  const cfg = raw ? JSON.parse(raw) : {};
+  cfg[PROVIDERS[_activeProvider].key] = key;
+  cfg.active_provider = _activeProvider;
+  window._settingsCfg = cfg;
+  await invoke('write_file', { path, content: JSON.stringify(cfg, null, 2) })
+    .catch(e => { toast('保存失败：' + e, 'danger'); return; });
+
+  saveBtn.textContent = '保存'; saveBtn.disabled = false;
+  statusEl.className = 'settings-key-status configured'; statusEl.textContent = '已配置';
+  toast('验证通过，已保存', 'success');
+};
+
+window.toggleKeyVisibility = function(inputId, btn) {
+  const input = document.getElementById(inputId);
+  const isHidden = input.type === 'password';
+  input.type = isHidden ? 'text' : 'password';
+  btn.style.color = isHidden ? 'var(--accent)' : '';
+};
+
+window.resetAllKeys = function() {
+  showConfirm(
+    '重置所有 API Key',
+    '将清除全部已配置的 API Key，此操作不可撤销。',
+    '确认重置',
+    async () => {
+      const path = await getConfigPath();
+      const raw = await invoke('read_file', { path }).catch(() => null);
+      const cfg = raw ? JSON.parse(raw) : {};
+      // 只删除 key 字段，保留 summary_prompt / active_provider 等其他配置
+      delete cfg.claude_api_key;
+      delete cfg.deepseek_api_key;
+      delete cfg.qwen_api_key;
+      window._settingsCfg = cfg;
+      await invoke('write_file', { path, content: JSON.stringify(cfg, null, 2) });
+      document.getElementById('active-api-key').value = '';
+      document.getElementById('active-api-key').type = 'password';
+      const statusEl = document.getElementById('settings-key-status');
+      statusEl.className = 'settings-key-status empty';
+      statusEl.textContent = '未配置';
+      toast('已重置所有 API Key', 'success');
+    }
+  );
+};
+
 async function initApp() {
   await Promise.all([
     loadSkills(),
@@ -631,6 +1433,7 @@ async function initApp() {
     loadSessions(),
     loadStats(),
     loadCache(),
+    loadSettings(),
   ]);
 }
 

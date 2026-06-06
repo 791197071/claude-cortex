@@ -71,6 +71,7 @@ pub struct Session {
     pub output_tokens: u64,
     pub cache_read_tokens: u64,
     pub cache_write_tokens: u64,
+    pub model_tokens: HashMap<String, u64>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -78,6 +79,7 @@ pub struct DayStats {
     pub date: String,
     pub input_tokens: u64,
     pub output_tokens: u64,
+    pub models: HashMap<String, u64>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -95,6 +97,7 @@ pub struct Stats {
     pub total_input: u64,
     pub total_output: u64,
     pub session_count: u64,
+    pub model_totals: HashMap<String, u64>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -717,6 +720,7 @@ fn parse_jsonl_session(path: &Path, project: &str, project_path: &str) -> Option
     let mut cache_read = 0u64;
     let mut cache_write = 0u64;
     let mut title = String::new();
+    let mut model_tokens: HashMap<String, u64> = HashMap::new();
 
     for line in content.lines() {
         let Ok(val) = serde_json::from_str::<serde_json::Value>(line) else {
@@ -743,10 +747,14 @@ fn parse_jsonl_session(path: &Path, project: &str, project_path: &str) -> Option
         // Sum tokens from assistant messages
         if val["type"].as_str() == Some("assistant") {
             if let Some(usage) = val["message"]["usage"].as_object() {
-                input_tokens += usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-                output_tokens += usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                let msg_input = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                let msg_output = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                input_tokens += msg_input;
+                output_tokens += msg_output;
                 cache_read += usage.get("cache_read_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
                 cache_write += usage.get("cache_creation_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                let model = val["message"]["model"].as_str().unwrap_or("unknown").to_string();
+                *model_tokens.entry(model).or_default() += msg_input + msg_output;
             }
         }
     }
@@ -775,6 +783,7 @@ fn parse_jsonl_session(path: &Path, project: &str, project_path: &str) -> Option
         output_tokens,
         cache_read_tokens: cache_read,
         cache_write_tokens: cache_write,
+        model_tokens,
     })
 }
 
@@ -820,6 +829,53 @@ fn list_sessions() -> Vec<Session> {
 #[tauri::command]
 fn delete_session(path: String) -> Result<(), String> {
     fs::remove_file(&path).map_err(|e| e.to_string())
+}
+
+#[derive(Serialize)]
+pub struct ExportMessage {
+    pub role: String,
+    pub text: String,
+}
+
+#[derive(Serialize)]
+pub struct ExportSession {
+    pub title: String,
+    pub project: String,
+    pub date: String,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub messages: Vec<ExportMessage>,
+}
+
+#[tauri::command]
+fn export_sessions(start_ts: u64, end_ts: u64) -> Vec<ExportSession> {
+    let sessions = list_sessions();
+    let mut result = Vec::new();
+    for s in sessions {
+        if s.timestamp < start_ts || s.timestamp > end_ts { continue; }
+        let content = match fs::read_to_string(&s.path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let mut messages = Vec::new();
+        for line in content.lines() {
+            let Ok(val) = serde_json::from_str::<serde_json::Value>(line) else { continue };
+            let msg_type = val["type"].as_str().unwrap_or("");
+            if msg_type != "user" && msg_type != "assistant" { continue; }
+            let text = extract_message_text(&val["message"]["content"]);
+            if text.is_empty() { continue; }
+            messages.push(ExportMessage { role: msg_type.to_string(), text });
+        }
+        result.push(ExportSession {
+            title: s.title,
+            project: s.project,
+            date: s.date,
+            input_tokens: s.input_tokens,
+            output_tokens: s.output_tokens,
+            messages,
+        });
+    }
+    result
 }
 
 #[tauri::command]
@@ -888,7 +944,8 @@ fn get_stats() -> Stats {
     let mut total_input = 0u64;
     let mut total_output = 0u64;
     let mut proj_map: HashMap<String, (u64, u64, u64)> = HashMap::new();
-    let mut day_map: HashMap<String, (u64, u64)> = HashMap::new();
+    let mut day_map: HashMap<String, (u64, u64, HashMap<String, u64>)> = HashMap::new();
+    let mut model_totals: HashMap<String, u64> = HashMap::new();
 
     for s in &sessions {
         total_input += s.input_tokens;
@@ -903,6 +960,10 @@ fn get_stats() -> Stats {
         let d = day_map.entry(day).or_default();
         d.0 += s.input_tokens;
         d.1 += s.output_tokens;
+        for (model, tokens) in &s.model_tokens {
+            *d.2.entry(model.clone()).or_default() += tokens;
+            *model_totals.entry(model.clone()).or_default() += tokens;
+        }
     }
 
     let mut projects: Vec<ProjectStats> = proj_map
@@ -918,15 +979,24 @@ fn get_stats() -> Stats {
 
     let mut daily: Vec<DayStats> = day_map
         .into_iter()
-        .map(|(date, (i, o))| DayStats { date, input_tokens: i, output_tokens: o })
+        .map(|(date, (i, o, models))| DayStats { date, input_tokens: i, output_tokens: o, models })
         .collect();
     daily.sort_by(|a, b| a.date.cmp(&b.date));
-    // Keep last 14 days
     if daily.len() > 14 {
         daily = daily.split_off(daily.len() - 14);
     }
 
-    Stats { daily, projects, total_input, total_output, session_count: sessions.len() as u64 }
+    Stats { daily, projects, total_input, total_output, session_count: sessions.len() as u64, model_totals }
+}
+
+#[tauri::command]
+fn get_home_dir() -> String {
+    home_dir().to_string_lossy().to_string()
+}
+
+#[tauri::command]
+fn get_config_path() -> String {
+    claude_dir().join("cortex-config.json").to_string_lossy().to_string()
 }
 
 // ── Cache ──
@@ -994,11 +1064,14 @@ pub fn run() {
             delete_file,
             list_sessions,
             delete_session,
+            export_sessions,
             read_session_messages,
             list_project_paths,
             get_stats,
             get_cache_info,
             clear_cache,
+            get_home_dir,
+            get_config_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
