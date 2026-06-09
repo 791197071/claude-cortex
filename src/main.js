@@ -935,12 +935,12 @@ async function rateSummary(text, provider, apiKey, tokens = 0) {
   const tokenLine = tokens > 0 ? `\n今日累计消耗 Token：${fmtTok(tokens)}（若消耗极高但总结内容贫乏，需从严扣分）` : '';
   const prompt = `你是一个眼光毒辣、不会轻易给高分的工作总结评审官。评分要真实，宁可低打也不能虚高。${tokenLine}
 
-评分标准（从高到低，实际分布应接近正态，不要总给高分）：
-- 夯：极罕见，内容出类拔萃、深度与亮点令人叹服，给了这个就是真的封神
-- 顶级：优秀，逻辑清晰亮点突出，确实有真实工作价值，但不能随便给
-- NPC：大多数总结应落在这里，平铺直叙，无亮点也无明显缺陷
-- 拉：内容空洞、逻辑混乱，或与实际严重脱节，或Token消耗巨大却毫无产出
-- 拉完了：完全不可用，废话连篇、极度贫乏，或纯粹在凑字数
+评分标准（默认先考虑NPC，有充分理由才能往上或往下）：
+- 夯：极其罕见，不仅有深度亮点，还要表达有力、结构清晰，缺一不可，一般不该出现
+- 顶级：有明确的具体成果和真实价值，且逻辑清晰无废话，仅"写得不错"不够
+- NPC：能完整记录工作内容即可到达，是绝大多数总结的正常水平
+- 拉：明显空洞、重复、或内容与实际工作脱节
+- 拉完了：毫无价值，纯粹是在敷衍
 
 输出格式：等级|评语（15字以内，带情绪、有个性、每次都不一样，禁止换行）
 - 评语必须是AI当场生成的真实感受，不能套模板，每次都要不一样
@@ -1087,9 +1087,9 @@ function showRatingBadge(grade, comment) {
   // 印章：fixed 定位，完全脱离文档流，不触发滚动
   const stamp = document.getElementById('summary-stamp');
   if (stamp) {
-    const fontSize = grade === 'NPC' ? '48px' : grade === '拉完了' ? '36px' : '56px';
+    const fontSize = grade === 'NPC' ? '48px' : grade === '拉完了' ? '28px' : '56px';
     const strokeW = grade === 'NPC' ? '.5px' : grade === '拉完了' ? '1px' : '1.5px';
-    stamp.innerHTML = `<span style="font-size:${fontSize};font-weight:900;letter-spacing:.08em;-webkit-text-stroke:${strokeW} ${s.ink}55;text-shadow:${s.shadow};line-height:1">${grade}</span>`;
+    stamp.innerHTML = `<span style="font-size:${fontSize};font-weight:900;letter-spacing:.05em;white-space:nowrap;-webkit-text-stroke:${strokeW} ${s.ink}55;text-shadow:${s.shadow};line-height:1">${grade}</span>`;
     const textarea = document.getElementById('summary-result-text');
     const rect = textarea ? textarea.getBoundingClientRect() : { top: 120, right: window.innerWidth - 40 };
     stamp.style.cssText = [
