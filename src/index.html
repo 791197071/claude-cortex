@@ -305,6 +305,43 @@ hr{border:none;border-top:0.5px solid var(--border);margin:2rem 0}
 /* ── Edit modal ── */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(44,47,66,0.3);backdrop-filter:blur(8px);z-index:200;align-items:center;justify-content:center}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes ratingPop{
+  0%{opacity:0;transform:scale(0.25) rotate(-15deg)}
+  55%{transform:scale(1.2) rotate(4deg)}
+  75%{transform:scale(0.93) rotate(-1deg)}
+  100%{opacity:1;transform:scale(1) rotate(0)}
+}
+@keyframes ratingGlow{
+  0%,100%{box-shadow:var(--rating-shadow,0 3px 14px rgba(108,142,245,.4))}
+  50%{box-shadow:var(--rating-shadow-hi,0 5px 22px rgba(108,142,245,.65))}
+}
+@keyframes ratingShake{
+  0%,100%{transform:rotate(-15deg) translateX(0)}
+  20%{transform:rotate(-15deg) translateX(-5px)}
+  40%{transform:rotate(-15deg) translateX(5px)}
+  60%{transform:rotate(-15deg) translateX(-3px)}
+  80%{transform:rotate(-15deg) translateX(3px)}
+}
+@keyframes stampDown{
+  0%  {transform:rotate(-15deg) scale(4) translateY(-40px);opacity:0;filter:blur(10px)}
+  26% {transform:rotate(-15deg) scale(0.68) translateY(10px);opacity:1;filter:blur(0)}
+  44% {transform:rotate(-15deg) scale(1.18) translateY(-5px)}
+  60% {transform:rotate(-15deg) scale(0.90) translateY(4px)}
+  76% {transform:rotate(-15deg) scale(1.05) translateY(-1px)}
+  100%{transform:rotate(-15deg) scale(1) translateY(0);opacity:1}
+}
+@keyframes stampPulse{
+  0%,100%{opacity:.85}
+  50%    {opacity:1}
+}
+@keyframes stampShine{
+  0%  {filter:brightness(1.8) drop-shadow(0 0 24px var(--si,#aaa))}
+  100%{filter:brightness(1)   drop-shadow(0 0 4px  var(--si,#aaa))}
+}
+@keyframes commentIn{
+  from{opacity:0;transform:translateY(6px)}
+  to{opacity:1;transform:translateY(0)}
+}
 .spin-icon{display:inline-block;animation:spin 1s linear infinite}
 .modal-bg.show{display:flex}
 .modal{background:var(--surface);border:0.5px solid var(--border2);border-radius:18px;width:660px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(44,47,66,0.18)}
@@ -1067,7 +1104,7 @@ document.getElementById('skill-detail-modal').onclick=function(e){if(e.target===
 <div class="modal-bg" id="summary-result-modal" style="z-index:300">
   <div class="modal" style="width:620px;max-height:88vh">
     <div class="modal-head">
-      <div style="display:flex;align-items:center;gap:10px">
+      <div style="display:flex;align-items:center;gap:10px;flex:1">
         <div style="width:30px;height:30px;border-radius:9px;background:var(--green-soft);border:0.5px solid rgba(52,199,123,0.25);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#2a9d74" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h10M2 7h7M2 10h5"/></svg>
         </div>
@@ -1076,9 +1113,13 @@ document.getElementById('skill-detail-modal').onclick=function(e){if(e.target===
           <div style="font-size:11px;color:var(--text3);margin-top:1px">可直接复制使用</div>
         </div>
       </div>
+      <div id="summary-rating-badge" style="display:none;flex-shrink:0;max-width:200px"></div>
     </div>
     <div class="modal-body" style="padding:20px 22px">
-      <textarea id="summary-result-text" style="width:100%;height:360px;padding:13px 14px;border:0.5px solid var(--border2);border-radius:10px;background:var(--surface2);color:var(--text);font-size:13px;font-family:inherit;line-height:1.75;resize:vertical;outline:none;box-sizing:border-box" readonly></textarea>
+      <div style="position:relative">
+        <textarea id="summary-result-text" style="width:100%;height:360px;padding:13px 14px;border:0.5px solid var(--border2);border-radius:10px;background:var(--surface2);color:var(--text);font-size:13px;font-family:inherit;line-height:1.75;resize:vertical;outline:none;box-sizing:border-box" readonly></textarea>
+        <div id="summary-stamp" style="display:none"></div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeSummaryResult()">关闭</button>

@@ -341,7 +341,7 @@ function sessionCardHtml(s) {
     <div class="session-body">
       <div class="session-title">${escHtml(s.title)}</div>
       <div class="session-meta">
-        <span class="session-project" style="${projStyle}">${escHtml(s.project) || '全局'}</span>
+        <span class="session-project" style="${projStyle}">${escHtml(s.project)}</span>
         <span class="session-date">${escHtml(s.date)}</span>
       </div>
       <div class="session-preview">${escHtml(s.project_path)}</div>
@@ -364,7 +364,7 @@ function renderSessionTabs(sessions) {
   // 统计每个项目的会话数，按数量降序排列
   const projMap = new Map();
   for (const s of sessions) {
-    const key = s.project || '全局';
+    const key = s.project;
     projMap.set(key, (projMap.get(key) || 0) + 1);
   }
   const projects = [...projMap.entries()].sort((a, b) => b[1] - a[1]);
@@ -656,14 +656,16 @@ window.openSummaryModal = async function() {
   btn.style.background = btn.style.borderColor = btn.style.color = '';
   setSummaryRange(0, document.getElementById('sum-pill-0'));
   document.getElementById('summary-loading-mask').style.display = 'none';
-  document.getElementById('summary-modal').classList.add('show');
 
+  // 先加载配置再显示弹窗，避免用户在 textarea 更新前就点击生成
   const path = await getConfigPath();
   const raw = await invoke('read_file', { path }).catch(() => null);
   const cfg = raw ? JSON.parse(raw) : {};
 
   const promptEl = document.getElementById('summary-prompt');
   promptEl.value = cfg.summary_prompt || DEFAULT_SUMMARY_PROMPT;
+
+  document.getElementById('summary-modal').classList.add('show');
   if (!promptEl._bound) {
     promptEl._bound = true;
     promptEl.addEventListener('input', () => {
@@ -672,14 +674,23 @@ window.openSummaryModal = async function() {
     });
   }
 
-  // 加载项目列表
+  // 加载项目列表——直接从已加载的会话数据提取，与会话历史页签保持完全一致
   _summarySelectedProjects.clear();
-  const allProjects = await invoke('list_project_paths').catch(() => []);
-  const uniqueProjects = [...new Map(allProjects.map(p => [p.name, p])).values()];
+  const projLatest = new Map();
+  for (const s of _sessionsData) {
+    if (s.project) {
+      const cur = projLatest.get(s.project) || 0;
+      if (s.timestamp > cur) projLatest.set(s.project, s.timestamp);
+    }
+  }
+  const projectNames = [...projLatest.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([name]) => name);
+  if (projectNames.length > 0) _summarySelectedProjects.add(projectNames[0]);
   const listEl = document.getElementById('summary-project-list');
-  listEl.innerHTML = uniqueProjects.length === 0
+  listEl.innerHTML = projectNames.length === 0
     ? '<span style="font-size:12px;color:var(--text3)">暂无项目</span>'
-    : uniqueProjects.map(p => `<button class="sum-proj-chip range-pill" data-name="${escHtml(p.name)}" onclick="toggleSummaryProject('${escHtml(p.name)}',this)">${escHtml(p.name)}</button>`).join('');
+    : projectNames.map(name => `<button class="sum-proj-chip range-pill${_summarySelectedProjects.has(name) ? ' active' : ''}" data-name="${escHtml(name)}" onclick="toggleSummaryProject('${escHtml(name)}',this)">${escHtml(name)}</button>`).join('');
   document.getElementById('sum-proj-toggle-all').textContent = '全选';
 
   const active = cfg.active_provider || 'claude';
@@ -720,6 +731,10 @@ window.doSummary = async function() {
   const end = document.getElementById('summary-end').value || _summaryEnd;
   if (!start || !end) { toast('请先选择时间范围', 'danger'); return; }
   const userPrompt = document.getElementById('summary-prompt').value.trim();
+
+  // 生成前立即保存提示词，不等 600ms 防抖
+  clearTimeout(_summaryPromptTimer);
+  await saveSummaryPrompt(userPrompt);
 
   // 用本地时间解析日期，避免 UTC 时区偏差漏掉当天 0-8 点的会话
   const startTs = Math.floor(new Date(start + 'T00:00:00').getTime() / 1000);
@@ -771,7 +786,7 @@ window.doSummary = async function() {
     const projects    = [...new Set(sessions.map(s => s.project).filter(Boolean))];
     const msgCount    = sessions.reduce((a, s) => a + s.messages.length, 0);
 
-    showMask(`正在调用 ${providerInfo.name} 生成总结（${sessions.length} 条会话）…`);
+    showMask(`正在调用 ${providerInfo.name} 生成总结（${sessions.length} 条会话，提示词 ${userPrompt.length} 字符）…`);
 
     // 4. 按模型上下文规格填满内容，优先 token 最多的会话，不跳过任何会话
     // 每个模型预留 2000 字符给 systemInstruction + metadata，剩余全部给会话内容
@@ -878,6 +893,7 @@ window.doSummary = async function() {
     hideMask();
     openSummaryResult(resultText);
     toast('总结已生成', 'success');
+    rateSummary(resultText, provider, apiKey, totalTokens).then(r => { if (r) showRatingBadge(r.grade, r.comment); });
   } catch (e) {
     hideMask();
     toast('生成失败：' + e.message, 'danger');
@@ -886,13 +902,241 @@ window.doSummary = async function() {
   }
 };
 
+const RATING_STYLES = {
+  '夯':     {
+    ink:'#f59e0b',
+    shadow:`0 0 14px #fde68a,0 0 32px #fbbf24,0 0 64px #f59e0bbb,0 0 100px #d9770677,5px 4px 0 #92400e55`,
+    glowVar:'#fbbf24',
+  },
+  '顶级':   {
+    ink:'#a78bfa',
+    shadow:`0 0 14px #c4b5fd,0 0 32px #a78bfa,0 0 64px #7c3aedaa,0 0 100px #5b21b666,4px 4px 0 #4c1d9544`,
+    glowVar:'#a78bfa',
+  },
+  'NPC':    {
+    ink:'#9ca3af',
+    shadow:`2px 2px 0 #1f2937,3px 3px 0 #111827,-1px -1px 0 #6b7280aa,0 0 6px #9ca3af33`,
+    glowVar:'#9ca3af',
+  },
+  '拉':     {
+    ink:'#f43f5e',
+    shadow:`0 0 14px #fda4af,0 0 32px #f43f5e,0 0 64px #e11d48bb,0 0 100px #be123c77,5px 4px 0 #9f123444`,
+    glowVar:'#f43f5e',
+  },
+  '拉完了': {
+    ink:'#71717a',
+    shadow:`4px 4px 0 #09090b,2px 2px 0 #18181b,0 0 4px #52525b66,-2px -2px 0 #3f3f4688,0 0 18px #71717a33`,
+    glowVar:'#52525b',
+  },
+};
+
+async function rateSummary(text, provider, apiKey, tokens = 0) {
+  const fmtTok = n => n >= 1000000 ? (n/1000000).toFixed(1)+'M' : n >= 1000 ? (n/1000).toFixed(1)+'K' : String(n);
+  const tokenLine = tokens > 0 ? `\n今日累计消耗 Token：${fmtTok(tokens)}（若消耗极高但总结内容贫乏，需从严扣分）` : '';
+  const prompt = `你是一个眼光毒辣、不会轻易给高分的工作总结评审官。评分要真实，宁可低打也不能虚高。${tokenLine}
+
+评分标准（从高到低，实际分布应接近正态，不要总给高分）：
+- 夯：极罕见，内容出类拔萃、深度与亮点令人叹服，给了这个就是真的封神
+- 顶级：优秀，逻辑清晰亮点突出，确实有真实工作价值，但不能随便给
+- NPC：大多数总结应落在这里，平铺直叙，无亮点也无明显缺陷
+- 拉：内容空洞、逻辑混乱，或与实际严重脱节，或Token消耗巨大却毫无产出
+- 拉完了：完全不可用，废话连篇、极度贫乏，或纯粹在凑字数
+
+输出格式：等级|评语（15字以内，带情绪、有个性、每次都不一样，禁止换行）
+- 评语必须是AI当场生成的真实感受，不能套模板，每次都要不一样
+- 评语中选1～2个情绪最强烈的词，用**词**包裹作为重点标记（禁止整句都加）
+- 夯的评语：热血沸腾、发自内心的赞叹，像在给英雄颁奖
+- 顶级的评语：真诚称赞，带点小骄傲，像老板看到超预期汇报
+- NPC的评语：不痛不痒，微妙的无聊感，像在打工人互相安慰
+- 拉的评语：委婉但诚实的失望，带点恨铁不成钢
+- 拉完了的评语：戏剧性崩溃，夸张的绝望感
+示例：夯|哥们这份总结**封神**了！
+只输出这一行，不要其他内容。
+
+待评分总结：\n${text.slice(0, 1600)}`;
+  try {
+    let raw = '';
+    if (provider === 'claude') {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method:'POST',
+        headers:{'x-api-key':apiKey,'anthropic-version':'2023-06-01','content-type':'application/json'},
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:60,messages:[{role:'user',content:prompt}]}),
+      });
+      raw = (await res.json()).content?.[0]?.text?.trim() || '';
+    } else {
+      const endpoint = provider==='deepseek' ? 'https://api.deepseek.com/v1/chat/completions' : 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+      const model = provider==='deepseek' ? 'deepseek-chat' : 'qwen-plus';
+      const res = await fetch(endpoint, {
+        method:'POST',
+        headers:{'Authorization':'Bearer '+apiKey,'content-type':'application/json'},
+        body:JSON.stringify({model,max_tokens:60,messages:[{role:'user',content:prompt}]}),
+      });
+      raw = (await res.json()).choices?.[0]?.message?.content?.trim() || '';
+    }
+    const [gradeRaw, comment = ''] = raw.split('|');
+    let grade = null;
+    if (gradeRaw.includes('拉完了')) grade = '拉完了';
+    else if (gradeRaw.includes('拉')) grade = '拉';
+    else if (gradeRaw.includes('夯')) grade = '夯';
+    else if (gradeRaw.includes('顶级')) grade = '顶级';
+    else if (gradeRaw.includes('NPC') || gradeRaw.includes('npc')) grade = 'NPC';
+    return grade ? { grade, comment: comment.trim() } : null;
+  } catch { return null; }
+}
+
+
+function burstParticles(grade) {
+  const palettes = {
+    '夯':   ['#fbbf24','#f59e0b','#10b981','#6ee7b7','#fff','#fde68a','#ef4444','#f97316'],
+    '顶级': ['#6c8ef5','#a78bfa','#60a5fa','#fff','#c4b5fd','#2dd4bf','#e879f9'],
+  };
+  const palette = palettes[grade];
+  if (!palette) return;
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9999';
+  canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+  document.body.appendChild(canvas);
+  const c = canvas.getContext('2d');
+  const badge = document.getElementById('summary-stamp');
+  const rect = badge?.getBoundingClientRect();
+  const ox = rect ? rect.left + rect.width/2 : window.innerWidth*0.75;
+  const oy = rect ? rect.top + rect.height/2 : 80;
+  const count = grade === '夯' ? 100 : 60;
+  const ps = Array.from({length:count}, () => ({
+    x:ox, y:oy,
+    vx:(Math.random()-.5)*(grade==='夯'?22:15),
+    vy:Math.random()*(-(grade==='夯'?18:12))-2,
+    r:Math.random()*(grade==='夯'?7:5)+2,
+    color:palette[Math.floor(Math.random()*palette.length)],
+    life:1, decay:Math.random()*.013+.007,
+    shape:['circle','rect','star'][Math.floor(Math.random()*3)],
+    rot:Math.random()*Math.PI*2, rotV:(Math.random()-.5)*.28,
+  }));
+  function star(c,r){
+    c.beginPath();
+    for(let i=0;i<5;i++){
+      const a=(i*4*Math.PI/5)-Math.PI/2, b=a+2*Math.PI/5;
+      i===0?c.moveTo(r*Math.cos(a),r*Math.sin(a)):c.lineTo(r*Math.cos(a),r*Math.sin(a));
+      c.lineTo(r*.4*Math.cos(b),r*.4*Math.sin(b));
+    }
+    c.closePath(); c.fill();
+  }
+  (function draw(){
+    c.clearRect(0,0,canvas.width,canvas.height);
+    let alive=false;
+    for(const p of ps){
+      p.x+=p.vx; p.y+=p.vy; p.vy+=.42; p.vx*=.985;
+      p.life-=p.decay; p.rot+=p.rotV;
+      if(p.life<=0) continue;
+      alive=true;
+      c.save(); c.globalAlpha=Math.min(p.life,1); c.fillStyle=p.color;
+      c.translate(p.x,p.y); c.rotate(p.rot);
+      if(p.shape==='rect') c.fillRect(-p.r,-p.r*.55,p.r*2,p.r*1.1);
+      else if(p.shape==='star') star(c,p.r);
+      else{c.beginPath();c.arc(0,0,p.r,0,Math.PI*2);c.fill();}
+      c.restore();
+    }
+    if(alive) requestAnimationFrame(draw); else canvas.remove();
+  })();
+}
+
+function screenFlash(color, opacity, dur) {
+  const el = document.createElement('div');
+  el.style.cssText = `position:fixed;inset:0;background:${color};pointer-events:none;z-index:9998;opacity:0;transition:opacity ${Math.round(dur/4)}ms ease`;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => {
+    el.style.opacity = String(opacity);
+    setTimeout(() => {
+      el.style.transition = `opacity ${Math.round(dur*3/4)}ms ease`;
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), dur*3/4+60);
+    }, dur/4);
+  });
+}
+
+function showRatingBadge(grade, comment) {
+  const s = RATING_STYLES[grade];
+  if (!s) return;
+
+  // 评语：弹框 header 右上角，随机配色，重点词撞色
+  const commentEl = document.getElementById('summary-rating-badge');
+  if (commentEl) {
+    commentEl.style.cssText = 'display:flex;align-items:center;flex-shrink:0;animation:commentIn .5s ease .85s both';
+    if (comment) {
+      const palettes = [
+        { base:'#0ea5e9', accent:'#f59e0b' },
+        { base:'#8b5cf6', accent:'#34d399' },
+        { base:'#f43f5e', accent:'#fbbf24' },
+        { base:'#10b981', accent:'#f472b6' },
+        { base:'#f97316', accent:'#60a5fa' },
+        { base:'#e879f9', accent:'#4ade80' },
+        { base:'#06b6d4', accent:'#fb7185' },
+        { base:'#a78bfa', accent:'#fde68a' },
+        { base:'#ec4899', accent:'#86efac' },
+        { base:'#14b8a6', accent:'#fca5a5' },
+      ];
+      const p = palettes[Math.floor(Math.random() * palettes.length)];
+      const html = escHtml(comment).replace(/\*\*(.+?)\*\*/g,
+        `<span style="color:${p.accent};font-weight:800;text-decoration:underline;text-underline-offset:3px;text-shadow:0 0 6px ${p.accent}88">$1</span>`);
+      commentEl.innerHTML = `<span style="font-size:13.5px;color:${p.base};font-style:italic;white-space:nowrap;font-weight:500;text-shadow:0 0 10px ${p.base}66">${html}</span>`;
+    } else {
+      commentEl.innerHTML = '';
+    }
+  }
+
+  // 印章：fixed 定位，完全脱离文档流，不触发滚动
+  const stamp = document.getElementById('summary-stamp');
+  if (stamp) {
+    const fontSize = grade === 'NPC' ? '48px' : grade === '拉完了' ? '36px' : '56px';
+    const strokeW = grade === 'NPC' ? '.5px' : grade === '拉完了' ? '1px' : '1.5px';
+    stamp.innerHTML = `<span style="font-size:${fontSize};font-weight:900;letter-spacing:.08em;-webkit-text-stroke:${strokeW} ${s.ink}55;text-shadow:${s.shadow};line-height:1">${grade}</span>`;
+    const textarea = document.getElementById('summary-result-text');
+    const rect = textarea ? textarea.getBoundingClientRect() : { top: 120, right: window.innerWidth - 40 };
+    stamp.style.cssText = [
+      'display:flex;align-items:center;justify-content:center',
+      `position:fixed;top:${rect.top + 10}px;left:${rect.right - 120}px;width:110px;height:110px`,
+      `color:${s.ink};background:none;border:none;z-index:9999`,
+      `--si:${s.glowVar}`,
+      'animation:stampDown .48s cubic-bezier(.2,.06,.12,1.1) forwards',
+      'cursor:default;user-select:none;pointer-events:none',
+    ].join(';');
+    // 落地后切换为呼吸 glow
+    setTimeout(() => {
+      if (stamp.style.display !== 'none') {
+        stamp.style.animation = `stampDown .48s cubic-bezier(.2,.06,.12,1.1) forwards, stampPulse ${grade==='NPC'?'4s':'2.2s'} ease-in-out .48s infinite`;
+      }
+    }, 500);
+  }
+
+  // 特效（无音效）
+  if (grade === '夯') {
+    screenFlash('#fbbf24', 0.18, 380);
+    setTimeout(() => burstParticles('夯'), 420);
+  } else if (grade === '顶级') {
+    setTimeout(() => burstParticles('顶级'), 420);
+  } else if (grade === '拉完了') {
+    screenFlash('#ef4444', 0.14, 500);
+    setTimeout(() => { if (stamp) stamp.style.animation = 'ratingShake .55s ease-in-out'; }, 630);
+  } else if (grade === '拉') {
+    setTimeout(() => { if (stamp) stamp.style.animation = 'ratingShake .5s ease-in-out'; }, 600);
+  }
+}
+
 window.openSummaryResult = function(text) {
+  const commentEl = document.getElementById('summary-rating-badge');
+  if (commentEl) commentEl.style.display = 'none';
+  const stamp = document.getElementById('summary-stamp');
+  if (stamp) stamp.style.display = 'none';
   document.getElementById('summary-result-text').value = text;
   document.getElementById('summary-result-modal').classList.add('show');
 };
 
 window.closeSummaryResult = function() {
   document.getElementById('summary-result-modal').classList.remove('show');
+  const stamp = document.getElementById('summary-stamp');
+  if (stamp) stamp.style.cssText = 'display:none';
+  const badge = document.getElementById('summary-rating-badge');
+  if (badge) badge.style.cssText = 'display:none';
 };
 
 window.copySummaryResult = async function() {
