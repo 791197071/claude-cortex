@@ -50,6 +50,7 @@ pub struct ProjectMemory {
     pub path: String,
     pub files: Vec<MemFile>,
     pub total_size: u64,
+    pub claude_md_path: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -122,6 +123,24 @@ pub struct ChatMessage {
 pub struct ProjectInfo {
     pub name: String,
     pub path: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ClaudeMdFile {
+    pub label: String,
+    pub path: String,
+    pub exists: bool,
+    pub size: u64,
+    pub project_path: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct RuleFile {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub category: String,
+    pub size: u64,
 }
 
 // ── Helpers ──
@@ -280,6 +299,38 @@ fn project_name_from_path(path: &str) -> String {
         .and_then(|n| n.to_str())
         .unwrap_or(path)
         .to_string()
+}
+
+// Claude Code encodes project paths as folder names by replacing each char that is not
+// [a-zA-Z0-9-] with '-', so Chinese characters become '-'. A run of 2+ consecutive dashes
+// marks a boundary where non-ASCII chars were encoded. Extract the project name from such
+// a hashed folder name when no JSONL file is available to give us the real path.
+fn clean_name_from_hashed_folder(folder_name: &str) -> String {
+    let name = folder_name.trim_start_matches('-');
+    let b = name.as_bytes();
+    let mut last_multi_end: Option<usize> = None;
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'-' {
+            let start = i;
+            while i < b.len() && b[i] == b'-' {
+                i += 1;
+            }
+            if i - start >= 2 {
+                last_multi_end = Some(i);
+            }
+        } else {
+            i += 1;
+        }
+    }
+    if let Some(pos) = last_multi_end {
+        let after = &name[pos..];
+        if !after.is_empty() {
+            return after.to_string();
+        }
+    }
+    // No multi-dash boundary: last dash-separated segment (handles simple ASCII paths)
+    name.rsplitn(2, '-').next().unwrap_or(name).to_string()
 }
 
 // ── Skills ──
@@ -640,21 +691,26 @@ fn list_memory() -> MemoryData {
                     continue;
                 }
 
-                // Get real project path
+                // Get real project path — same find_map strategy as list_project_paths
                 let real_path = fs::read_dir(&folder)
                     .ok()
-                    .and_then(|mut rd| {
-                        rd.find(|e| {
-                            e.as_ref()
-                                .map(|e| e.path().extension().and_then(|x| x.to_str()) == Some("jsonl"))
-                                .unwrap_or(false)
-                        })
+                    .and_then(|rd| {
+                        rd.filter_map(|e| e.ok())
+                            .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("jsonl"))
+                            .find_map(|e| project_path_from_jsonl(&e.path()))
                     })
-                    .and_then(|e| e.ok())
-                    .and_then(|e| project_path_from_jsonl(&e.path()))
-                    .unwrap_or_else(|| folder.file_name().unwrap_or_default().to_string_lossy().to_string());
+                    .unwrap_or_default();
 
-                let project_name = project_name_from_path(&real_path);
+                let is_real_path = Path::new(&real_path).is_absolute();
+
+                let project_name = if is_real_path {
+                    project_name_from_path(&real_path)
+                } else {
+                    // Derive a readable name from the hashed folder name
+                    let fname = folder.file_name().unwrap_or_default().to_string_lossy();
+                    clean_name_from_hashed_folder(&fname)
+                };
+
                 let mut files = Vec::new();
                 let mut total_size = 0u64;
 
@@ -681,8 +737,24 @@ fn list_memory() -> MemoryData {
                     }
                 }
 
-                if !files.is_empty() {
-                    projects.push(ProjectMemory { project: project_name, path: real_path, files, total_size });
+                // Check for CLAUDE.md at project root and .claude/ subdirectory
+                let claude_md_path = if is_real_path {
+                    let cm = PathBuf::from(&real_path).join("CLAUDE.md");
+                    let cm_dot = PathBuf::from(&real_path).join(".claude").join("CLAUDE.md");
+                    if cm.exists() {
+                        Some(cm.to_string_lossy().to_string())
+                    } else if cm_dot.exists() {
+                        Some(cm_dot.to_string_lossy().to_string())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                if !files.is_empty() || claude_md_path.is_some() {
+                    let stored_path = if is_real_path { real_path } else { String::new() };
+                    projects.push(ProjectMemory { project: project_name, path: stored_path, files, total_size, claude_md_path });
                 }
             }
         }
@@ -810,11 +882,17 @@ fn list_sessions() -> Vec<Session> {
             .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("jsonl"))
             .collect();
 
-        let project_path = jsonl_files
-            .first()
-            .and_then(|e| project_path_from_jsonl(&e.path()))
+        let project_path = jsonl_files.iter()
+            .find_map(|e| project_path_from_jsonl(&e.path()))
             .unwrap_or_default();
-        let project_name = project_name_from_path(&project_path);
+        let project_name = if project_path.is_empty() {
+            folder.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_string()
+        } else {
+            project_name_from_path(&project_path)
+        };
 
         for file in &jsonl_files {
             if let Some(session) = parse_jsonl_session(&file.path(), &project_name, &project_path) {
@@ -887,13 +965,22 @@ fn list_project_paths() -> Vec<ProjectInfo> {
     for entry in entries.filter_map(|e| e.ok()) {
         let folder = entry.path();
         if !folder.is_dir() { continue; }
-        let real_path = fs::read_dir(&folder).ok()
-            .and_then(|mut rd| rd.find(|e| e.as_ref().map(|e| e.path().extension().and_then(|x| x.to_str()) == Some("jsonl")).unwrap_or(false)))
-            .and_then(|e| e.ok())
-            .and_then(|e| project_path_from_jsonl(&e.path()))
+        let real_path = fs::read_dir(&folder)
+            .ok()
+            .and_then(|rd| {
+                rd.filter_map(|e| e.ok())
+                    .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("jsonl"))
+                    .find_map(|e| project_path_from_jsonl(&e.path()))
+            })
             .unwrap_or_default();
-        if real_path.is_empty() || !seen.insert(real_path.clone()) { continue; }
-        result.push(ProjectInfo { name: project_name_from_path(&real_path), path: real_path });
+        let (name, key) = if real_path.is_empty() {
+            let fname = folder.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+            (fname.clone(), folder.to_string_lossy().to_string())
+        } else {
+            (project_name_from_path(&real_path), real_path.clone())
+        };
+        if name.is_empty() || !seen.insert(key) { continue; }
+        result.push(ProjectInfo { name, path: real_path });
     }
     result.sort_by(|a, b| a.name.cmp(&b.name));
     result
@@ -990,6 +1077,105 @@ fn get_stats() -> Stats {
 }
 
 #[tauri::command]
+fn list_claude_mds() -> Vec<ClaudeMdFile> {
+    let mut result = Vec::new();
+    let claude = claude_dir();
+
+    let global_path = claude.join("CLAUDE.md");
+    let global_size = if global_path.exists() {
+        fs::metadata(&global_path).map(|m| m.len()).unwrap_or(0)
+    } else {
+        0
+    };
+    result.push(ClaudeMdFile {
+        label: "全局".to_string(),
+        path: global_path.to_string_lossy().to_string(),
+        exists: global_path.exists(),
+        size: global_size,
+        project_path: String::new(),
+    });
+
+    for p in list_project_paths() {
+        if p.path.is_empty() {
+            continue;
+        }
+        let claude_md = PathBuf::from(&p.path).join("CLAUDE.md");
+        let claude_md_dot = PathBuf::from(&p.path).join(".claude").join("CLAUDE.md");
+        let (final_path, exists) = if claude_md.exists() {
+            (claude_md, true)
+        } else if claude_md_dot.exists() {
+            (claude_md_dot, true)
+        } else {
+            (claude_md, false)
+        };
+        let size = if exists { fs::metadata(&final_path).map(|m| m.len()).unwrap_or(0) } else { 0 };
+        result.push(ClaudeMdFile {
+            label: p.name,
+            path: final_path.to_string_lossy().to_string(),
+            exists,
+            size,
+            project_path: p.path,
+        });
+    }
+    result
+}
+
+fn collect_rule_files(base: &Path, dir: &Path, result: &mut Vec<RuleFile>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    let mut entries: Vec<_> = entries.filter_map(|e| e.ok()).collect();
+    entries.sort_by_key(|e| e.file_name());
+    for entry in entries {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_rule_files(base, &path, result);
+        } else if path.extension().and_then(|x| x.to_str()) == Some("md") {
+            let rel = path.strip_prefix(base).unwrap_or(&path);
+            let components: Vec<_> = rel.components().collect();
+            let category = if components.len() > 1 {
+                components[..components.len() - 1]
+                    .iter()
+                    .map(|c| c.as_os_str().to_string_lossy().to_string())
+                    .collect::<Vec<_>>()
+                    .join("/")
+            } else {
+                String::new()
+            };
+            let name = path
+                .file_stem()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_string();
+            let size = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+            let id = rel
+                .to_string_lossy()
+                .replace('/', "__")
+                .replace('.', "_");
+            result.push(RuleFile {
+                id,
+                name,
+                path: path.to_string_lossy().to_string(),
+                category,
+                size,
+            });
+        }
+    }
+}
+
+#[tauri::command]
+fn list_rules() -> Vec<RuleFile> {
+    let rules_dir = claude_dir().join("rules");
+    if !rules_dir.exists() {
+        return vec![];
+    }
+    let mut result = Vec::new();
+    collect_rule_files(&rules_dir, &rules_dir, &mut result);
+    result.sort_by(|a, b| a.category.cmp(&b.category).then(a.name.cmp(&b.name)));
+    result
+}
+
+#[tauri::command]
 fn get_home_dir() -> String {
     home_dir().to_string_lossy().to_string()
 }
@@ -1072,6 +1258,8 @@ pub fn run() {
             clear_cache,
             get_home_dir,
             get_config_path,
+            list_claude_mds,
+            list_rules,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -8,13 +8,17 @@
   },
   "app": {
     "withGlobalTauri": true,
+    "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "Claude Cortex",
+        "title": "Cortex",
         "width": 1200,
         "height": 800,
         "minWidth": 900,
-        "minHeight": 600
+        "minHeight": 600,
+        "decorations": false,
+        "transparent": true,
+        "shadow": true
       }
     ],
     "security": {

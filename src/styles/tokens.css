@@ -1,0 +1,72 @@
+/* ── 设计 Token ──────────────────────────────────────────────────
+ * 所有颜色、尺寸、圆角等设计变量都在此定义。
+ * 修改视觉风格时只需调整此文件，其他组件通过 CSS 变量自动更新。
+ * ──────────────────────────────────────────────────────────────── */
+
+/* 全局盒模型重置 */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* ── 背景层级 ── */
+  --bg: #f7f8fc;          /* 应用根背景 */
+  --surface: #fff;         /* 卡片/内容背景 */
+  --surface2: #f0f2f8;    /* 次要背景 */
+  --surface3: #e8ecf5;    /* 第三层背景 */
+
+  /* ── 文字层级 ── */
+  --text: #2c2f42;         /* 主文字 */
+  --text2: #6b7280;        /* 次要文字 */
+  --text3: #b0b8cc;        /* 弱化文字 / 占位符 */
+
+  /* ── 边框 ── */
+  --border: rgba(100, 110, 160, 0.1);    /* 标准边框 */
+  --border2: rgba(100, 110, 160, 0.18);  /* 强调边框 */
+
+  /* ── 主题色 ── */
+  --accent: #6c8ef5;
+  --accent-soft: #eef1fd;
+
+  /* ── 语义色（成功 / 信息 / 警告 / 危险 / 紫色 / 青色） ── */
+  --green: #52c79b;   --green-soft: #edfaf4;
+  --blue: #60a5fa;    --blue-soft: #eff6ff;
+  --amber: #f9a825;   --amber-soft: #fffbeb;
+  --purple: #a78bfa;  --purple-soft: #f5f3ff;
+  --red: #f87171;     --red-soft: #fff1f1;
+  --teal: #2dd4bf;    --teal-soft: #f0fdfb;
+
+  /* ── 布局尺寸 ── */
+  --sidebar-w: 210px;
+  --titlebar-h: 52px;
+
+  /* ── 圆角 ── */
+  --radius: 14px;
+  --radius-sm: 9px;
+}
+
+/* ── 根元素：透明背景支持 macOS 阴影 ── */
+html, body {
+  background: transparent !important;
+  height: 100vh;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── 自定义滚动条 ── */
+::-webkit-scrollbar { width: 5px; height: 5px }
+::-webkit-scrollbar-track { background: transparent }
+::-webkit-scrollbar-thumb { background: rgba(100,110,160,.2); border-radius: 10px }
+::-webkit-scrollbar-thumb:hover { background: rgba(100,110,160,.38) }
+::-webkit-scrollbar-corner { background: transparent }
+
+hr { border: none; border-top: 0.5px solid var(--border); margin: 2rem 0 }
