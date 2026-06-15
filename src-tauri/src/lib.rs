@@ -73,6 +73,8 @@ pub struct Session {
     pub cache_read_tokens: u64,
     pub cache_write_tokens: u64,
     pub model_tokens: HashMap<String, u64>,
+    pub model_input_tokens: HashMap<String, u64>,
+    pub model_output_tokens: HashMap<String, u64>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -99,6 +101,21 @@ pub struct Stats {
     pub total_output: u64,
     pub session_count: u64,
     pub model_totals: HashMap<String, u64>,
+    pub model_input_totals: HashMap<String, u64>,
+    pub model_output_totals: HashMap<String, u64>,
+    pub total_cache_read: u64,
+    pub total_cache_write: u64,
+}
+
+#[derive(Serialize, Deserialize, Default)]
+pub struct ClaudeUsage {
+    pub plan: String,
+    pub subscription_type: String,
+    pub five_hour_pct: Option<f64>,
+    pub five_hour_resets_at: Option<String>,
+    pub seven_day_pct: Option<f64>,
+    pub seven_day_resets_at: Option<String>,
+    pub error: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -793,6 +810,8 @@ fn parse_jsonl_session(path: &Path, project: &str, project_path: &str) -> Option
     let mut cache_write = 0u64;
     let mut title = String::new();
     let mut model_tokens: HashMap<String, u64> = HashMap::new();
+    let mut model_input_tokens: HashMap<String, u64> = HashMap::new();
+    let mut model_output_tokens: HashMap<String, u64> = HashMap::new();
 
     for line in content.lines() {
         let Ok(val) = serde_json::from_str::<serde_json::Value>(line) else {
@@ -826,7 +845,9 @@ fn parse_jsonl_session(path: &Path, project: &str, project_path: &str) -> Option
                 cache_read += usage.get("cache_read_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
                 cache_write += usage.get("cache_creation_input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
                 let model = val["message"]["model"].as_str().unwrap_or("unknown").to_string();
-                *model_tokens.entry(model).or_default() += msg_input + msg_output;
+                *model_tokens.entry(model.clone()).or_default() += msg_input + msg_output;
+                *model_input_tokens.entry(model.clone()).or_default() += msg_input;
+                *model_output_tokens.entry(model).or_default() += msg_output;
             }
         }
     }
@@ -856,6 +877,8 @@ fn parse_jsonl_session(path: &Path, project: &str, project_path: &str) -> Option
         cache_read_tokens: cache_read,
         cache_write_tokens: cache_write,
         model_tokens,
+        model_input_tokens,
+        model_output_tokens,
     })
 }
 
@@ -1030,13 +1053,19 @@ fn get_stats() -> Stats {
     let sessions = list_sessions();
     let mut total_input = 0u64;
     let mut total_output = 0u64;
+    let mut total_cache_read = 0u64;
+    let mut total_cache_write = 0u64;
     let mut proj_map: HashMap<String, (u64, u64, u64)> = HashMap::new();
     let mut day_map: HashMap<String, (u64, u64, HashMap<String, u64>)> = HashMap::new();
     let mut model_totals: HashMap<String, u64> = HashMap::new();
+    let mut model_input_totals: HashMap<String, u64> = HashMap::new();
+    let mut model_output_totals: HashMap<String, u64> = HashMap::new();
 
     for s in &sessions {
         total_input += s.input_tokens;
         total_output += s.output_tokens;
+        total_cache_read += s.cache_read_tokens;
+        total_cache_write += s.cache_write_tokens;
 
         let p = proj_map.entry(s.project.clone()).or_default();
         p.0 += s.input_tokens;
@@ -1050,6 +1079,12 @@ fn get_stats() -> Stats {
         for (model, tokens) in &s.model_tokens {
             *d.2.entry(model.clone()).or_default() += tokens;
             *model_totals.entry(model.clone()).or_default() += tokens;
+        }
+        for (model, t) in &s.model_input_tokens {
+            *model_input_totals.entry(model.clone()).or_default() += t;
+        }
+        for (model, t) in &s.model_output_tokens {
+            *model_output_totals.entry(model.clone()).or_default() += t;
         }
     }
 
@@ -1073,7 +1108,7 @@ fn get_stats() -> Stats {
         daily = daily.split_off(daily.len() - 14);
     }
 
-    Stats { daily, projects, total_input, total_output, session_count: sessions.len() as u64, model_totals }
+    Stats { daily, projects, total_input, total_output, session_count: sessions.len() as u64, model_totals, model_input_totals, model_output_totals, total_cache_read, total_cache_write }
 }
 
 #[tauri::command]
@@ -1232,6 +1267,115 @@ fn clear_cache(path: String) -> Result<(), String> {
     Ok(())
 }
 
+// ── Claude Pro 用量 ──
+
+#[tauri::command]
+async fn get_claude_usage() -> ClaudeUsage {
+    tauri::async_runtime::spawn_blocking(get_claude_usage_blocking)
+        .await
+        .unwrap_or_else(|_| ClaudeUsage {
+            error: Some("执行失败，请重试".to_string()),
+            ..Default::default()
+        })
+}
+
+fn get_claude_usage_blocking() -> ClaudeUsage {
+    macro_rules! err {
+        ($msg:expr) => {
+            ClaudeUsage { error: Some($msg.to_string()), ..Default::default() }
+        };
+    }
+
+    // Read OAuth credentials from macOS Keychain
+    let keychain_out = Command::new("/usr/bin/security")
+        .args(["find-generic-password", "-s", "Claude Code-credentials", "-w"])
+        .output();
+
+    let (access_token, subscription_type) = match keychain_out {
+        Ok(o) if o.status.success() => {
+            let raw = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            let json: serde_json::Value = match serde_json::from_str(&raw) {
+                Ok(v) => v,
+                Err(_) => return err!("Keychain 凭证格式错误"),
+            };
+            let token = json["claudeAiOauth"]["accessToken"]
+                .as_str().unwrap_or("").to_string();
+            let sub = json["claudeAiOauth"]["subscriptionType"]
+                .as_str().unwrap_or("").to_string();
+            if token.is_empty() {
+                return err!("未找到 OAuth Token，请确认已用官方账号登录 Claude Code");
+            }
+            (token, sub)
+        }
+        _ => return err!("无法读取 Keychain，请确认已登录 Claude Code"),
+    };
+
+    // 凭证已读到，立即派生套餐名——后续所有错误响应都携带此信息
+    let plan = match subscription_type.as_str() {
+        "pro"                 => "Claude Pro",
+        "max" | "claude_max" => "Claude Max",
+        "team"                => "Claude Team",
+        "enterprise"          => "Claude Enterprise",
+        s if !s.is_empty()   => s,
+        _                     => "Unknown",
+    }.to_string();
+
+    macro_rules! err_plan {
+        ($msg:expr) => {
+            ClaudeUsage {
+                plan: plan.clone(),
+                subscription_type: subscription_type.clone(),
+                error: Some($msg.to_string()),
+                ..Default::default()
+            }
+        };
+    }
+
+    // Call Anthropic usage API via curl
+    let curl_out = Command::new("curl")
+        .arg("-s")
+        .arg("-w").arg("\n%{http_code}")
+        .arg("--max-time").arg("15")
+        .arg("-H").arg(format!("Authorization: Bearer {}", access_token))
+        .arg("-H").arg("anthropic-beta: oauth-2025-04-20")
+        .arg("-H").arg("User-Agent: claude-code/2.1")
+        .arg("https://api.anthropic.com/api/oauth/usage")
+        .output();
+
+    let out_str = match curl_out {
+        Ok(o) => String::from_utf8_lossy(&o.stdout).trim().to_string(),
+        Err(_) => return err_plan!("网络请求失败，请检查网络连接"),
+    };
+
+    // Split body and status code
+    let (body, status) = match out_str.rfind('\n') {
+        Some(pos) => (&out_str[..pos], out_str[pos + 1..].trim()),
+        None => (out_str.as_str(), ""),
+    };
+
+    match status {
+        "401" | "403" => return err_plan!("Token 无效或已过期，请重启 Claude Code 刷新凭证"),
+        "429" => return err_plan!("请求过于频繁，请稍后重试"),
+        s if !s.is_empty() && s != "200" => return err_plan!(&format!("API 错误 (HTTP {})", s)),
+        _ => {}
+    }
+
+    let data: serde_json::Value = match serde_json::from_str(body) {
+        Ok(v) => v,
+        Err(_) => return err_plan!("响应解析失败"),
+    };
+
+    ClaudeUsage {
+        plan,
+        subscription_type,
+        five_hour_pct:      data["five_hour"]["utilization"].as_f64(),
+        five_hour_resets_at: data["five_hour"]["resets_at"].as_str().map(|s| s.to_string()),
+        seven_day_pct:      data["seven_day"]["utilization"].as_f64(),
+        seven_day_resets_at: data["seven_day"]["resets_at"].as_str().map(|s| s.to_string()),
+        error: None,
+    }
+}
+
 // ── Run ──
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1260,6 +1404,7 @@ pub fn run() {
             get_config_path,
             list_claude_mds,
             list_rules,
+            get_claude_usage,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

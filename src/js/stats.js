@@ -16,17 +16,14 @@
  * ──────────────────────────────────────────────────────────────── */
 
 /**
- * 根据 model_totals 和全局 input/output 比例估算各模型费用，返回总费用（USD）
- * 由于 model_tokens 未区分 input/output，用全局比例分摊
+ * 用每个模型真实的 input/output tokens 计算总费用（USD）
  */
-function calcTotalCost(modelTotals, totalInput, totalOutput) {
-  const totalAll = totalInput + totalOutput;
-  if (totalAll === 0) return 0;
-  const inputRatio = totalInput / totalAll;
+function calcTotalCost(modelInputTotals, modelOutputTotals) {
   let total = 0;
-  for (const [model, tokens] of Object.entries(modelTotals)) {
+  const models = new Set([...Object.keys(modelInputTotals), ...Object.keys(modelOutputTotals)]);
+  for (const model of models) {
     const { input, output } = getModelPricing(model);
-    total += (tokens * inputRatio * input + tokens * (1 - inputRatio) * output) / 1_000_000;
+    total += ((modelInputTotals[model] || 0) * input + (modelOutputTotals[model] || 0) * output) / 1_000_000;
   }
   return total;
 }
@@ -69,7 +66,13 @@ async function loadStats() {
   const totalTokens = stats.total_input + stats.total_output;
   const avg = stats.session_count > 0 ? Math.round(totalTokens / stats.session_count) : 0;
 
-  const totalCost = calcTotalCost(stats.model_totals || {}, stats.total_input, stats.total_output);
+  const totalCost = calcTotalCost(stats.model_input_totals || {}, stats.model_output_totals || {});
+
+  /* 缓存命中率 */
+  const cacheRead  = stats.total_cache_read  || 0;
+  const cacheWrite = stats.total_cache_write || 0;
+  const cacheTotal = cacheRead + cacheWrite;
+  const hitRate    = cacheTotal > 0 ? Math.round(cacheRead / cacheTotal * 100) : null;
 
   /* 更新顶部统计卡片 */
   const elMap = {
@@ -78,11 +81,14 @@ async function loadStats() {
     'stat-avg-tokens':     fmtTokens(avg),
     'stat-proj-count':     stats.projects.length,
     'stat-total-cost':     fmtCost(totalCost),
+    'stat-cache-hit':      hitRate != null ? hitRate + '%' : '-',
   };
   Object.entries(elMap).forEach(([id, val]) => {
     const el = document.getElementById(id);
     if (el) el.textContent = val;
   });
+
+  renderCacheEff(cacheRead, cacheWrite, stats.model_input_totals || {});
 
   /* 模型列表：按 Token 用量降序 */
   const allModels = Object.entries(stats.model_totals || {})
@@ -92,7 +98,7 @@ async function loadStats() {
   renderBarChart(stats.daily, allModels);
   renderModelLegend(allModels, stats.model_totals || {});
   renderProjTable(stats.projects, totalTokens, totalCost);
-  renderModelTable(stats.model_totals || {}, allModels, stats.total_input, stats.total_output);
+  renderModelTable(stats.model_totals || {}, allModels, stats.model_input_totals || {}, stats.model_output_totals || {});
 }
 
 /**
@@ -156,7 +162,7 @@ window.switchStatsTab = function (tab) {
 /**
  * 渲染模型用量表（Token 占比进度条 + 估算费用）
  */
-function renderModelTable(modelTotals, allModels, totalInput, totalOutput) {
+function renderModelTable(modelTotals, allModels, modelInputTotals, modelOutputTotals) {
   const tbody = document.getElementById('stats-model-tbody');
   if (!tbody) return;
   const total = Object.values(modelTotals).reduce((a, b) => a + b, 0);
@@ -164,14 +170,12 @@ function renderModelTable(modelTotals, allModels, totalInput, totalOutput) {
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:20px">暂无数据</td></tr>';
     return;
   }
-  const totalAll = totalInput + totalOutput;
-  const inputRatio = totalAll > 0 ? totalInput / totalAll : 0.5;
   tbody.innerHTML = allModels.map(m => {
     const tokens = modelTotals[m] || 0;
     const pct    = total > 0 ? Math.round((tokens / total) * 100) : 0;
     const color  = modelColor(m, allModels);
     const { input: ip, output: op } = getModelPricing(m);
-    const cost = (tokens * inputRatio * ip + tokens * (1 - inputRatio) * op) / 1_000_000;
+    const cost = ((modelInputTotals[m] || 0) * ip + (modelOutputTotals[m] || 0) * op) / 1_000_000;
     return `
     <tr>
       <td style="display:flex;align-items:center;gap:8px">
@@ -221,4 +225,31 @@ function renderProjTable(projects, totalTokens, totalCost) {
       <td style="color:var(--green);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right">≈ ${fmtCost(cost)}</td>
     </tr>`;
   }).join('');
+}
+
+/**
+ * 渲染缓存效率细节行（在条形图和项目表格之间）
+ * 命中率 = cache_read / (cache_read + cache_write)
+ * 节省估算 = cache_read * 0.9 * 平均输入单价 / 1M
+ */
+function renderCacheEff(cacheRead, cacheWrite, modelInputTotals) {
+  const wrap = document.getElementById('cache-eff-wrap');
+  if (!wrap) return;
+
+  const total = cacheRead + cacheWrite;
+  if (total === 0) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+
+  const hitPct  = Math.round(cacheRead  / total * 100);
+  const missPct = 100 - hitPct;
+
+  document.getElementById('cache-read-val').textContent  = fmtTokens(cacheRead);
+  document.getElementById('cache-write-val').textContent = fmtTokens(cacheWrite);
+  document.getElementById('cache-hit-pct').textContent   = hitPct + '%';
+  document.getElementById('cache-miss-pct').textContent  = missPct + '%';
+
+  const readBar  = document.getElementById('cache-read-bar');
+  const writeBar = document.getElementById('cache-write-bar');
+  if (readBar)  readBar.style.width  = hitPct + '%';
+  if (writeBar) writeBar.style.width = missPct + '%';
 }

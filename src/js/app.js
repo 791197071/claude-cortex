@@ -19,6 +19,7 @@ async function initApp() {
     loadStats(),
     loadCache(),
     loadSettings(),
+    loadClaudeUsage(),
   ]);
 }
 
@@ -40,4 +41,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* 所有模块均已加载，启动应用 */
   initApp();
+
+  /* ── 窗口获焦 / 切回时刷新统计和用量 ── */
+  let _lastFocusRefresh = 0;
+  function _onFocus() {
+    const now = Date.now();
+    if (now - _lastFocusRefresh < 60_000) return;
+    _lastFocusRefresh = now;
+    loadStats();
+    loadClaudeUsage(true, true);
+  }
+
+  window.addEventListener('focus', _onFocus);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) _onFocus();
+  });
+
+  /* Tauri 原生窗口焦点事件（比 web focus 更可靠） */
+  const { listen } = window.__TAURI__?.event ?? {};
+  if (listen) listen('tauri://focus', _onFocus);
 });

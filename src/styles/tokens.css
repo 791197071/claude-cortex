@@ -62,11 +62,8 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── 自定义滚动条 ── */
-::-webkit-scrollbar { width: 5px; height: 5px }
-::-webkit-scrollbar-track { background: transparent }
-::-webkit-scrollbar-thumb { background: rgba(100,110,160,.2); border-radius: 10px }
-::-webkit-scrollbar-thumb:hover { background: rgba(100,110,160,.38) }
-::-webkit-scrollbar-corner { background: transparent }
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; }
+
 
 hr { border: none; border-top: 0.5px solid var(--border); margin: 2rem 0 }
