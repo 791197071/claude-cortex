@@ -8,8 +8,5 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.2"
-  },
-  "dependencies": {
-    "@tauri-apps/cli-darwin-x64": "^2.11.2"
   }
 }

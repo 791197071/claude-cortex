@@ -27,7 +27,8 @@ window.loadClaudeUsage = async function (force = false, silent = false) {
   }
 
   // silent 模式（焦点刷新）：有旧数据时不显示转圈，直接后台更新
-  if (!silent && !_usageCache) _showLoading(true);
+  // force=true（手动重试）时始终显示加载状态，让用户看到反馈
+  if (!silent && (force || !_usageCache)) _showLoading(true);
 
   // 防止并发重复请求
   if (_fetching) return;
@@ -35,8 +36,12 @@ window.loadClaudeUsage = async function (force = false, silent = false) {
 
   try {
     const data = await invoke('get_claude_usage');
-    _usageCache = { data, fetchedAt: Date.now() };
-    _renderUsage(data, _usageCache.fetchedAt);
+    const fetchedAt = Date.now();
+    // 只缓存成功响应；data.error 时不缓存，保证重试能正常显示加载状态
+    if (!data.error) {
+      _usageCache = { data, fetchedAt };
+    }
+    _renderUsage(data, fetchedAt);
   } catch (e) {
     // 只在没有旧数据时才展示错误块
     if (!_usageCache) _showError(String(e));

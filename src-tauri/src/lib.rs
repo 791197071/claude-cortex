@@ -1279,6 +1279,7 @@ async fn get_claude_usage() -> ClaudeUsage {
         })
 }
 
+#[cfg(target_os = "macos")]
 fn get_claude_usage_blocking() -> ClaudeUsage {
     macro_rules! err {
         ($msg:expr) => {
@@ -1373,6 +1374,14 @@ fn get_claude_usage_blocking() -> ClaudeUsage {
         seven_day_pct:      data["seven_day"]["utilization"].as_f64(),
         seven_day_resets_at: data["seven_day"]["resets_at"].as_str().map(|s| s.to_string()),
         error: None,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn get_claude_usage_blocking() -> ClaudeUsage {
+    ClaudeUsage {
+        error: Some("官方用量查询仅支持 macOS，Windows/Linux 版本暂不支持此功能".to_string()),
+        ..Default::default()
     }
 }
 
