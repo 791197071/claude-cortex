@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  background: transparent !important;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.wrap {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 身体上下浮动 */
+.body-group {
+  transform-origin: 7.5px 13px;
+  animation: bob 2.6s ease-in-out infinite;
+}
+
+/* 阴影配合浮动缩放 */
+.shadow {
+  transform-origin: 7.5px 15.5px;
+  animation: shadow-scale 2.6s ease-in-out infinite;
+}
+
+/* 眨眼 */
+.eyes {
+  transform-origin: 7.5px 9px;
+  animation: blink 3.2s ease-in-out infinite;
+}
+
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-1.2px); }
+}
+@keyframes shadow-scale {
+  0%, 100% { transform: scaleX(1); opacity: 0.5; }
+  50%       { transform: scaleX(0.85); opacity: 0.35; }
+}
+@keyframes blink {
+  0%, 88%, 100% { transform: scaleY(1); }
+  94%            { transform: scaleY(0.08); }
+}
+</style>
+</head>
+<body data-tauri-drag-region>
+<div class="wrap" data-tauri-drag-region>
+
+<!-- Clawd 像素螃蟹，来自 clawd-emotes-skill anatomy.md -->
+<svg width="150" height="150" viewBox="-15 -25 45 45" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+
+  <!-- 阴影 -->
+  <rect class="shadow" x="3" y="15" width="9" height="1" fill="#000" opacity=".5"/>
+
+  <g class="body-group">
+
+    <!-- 四条腿 -->
+    <g fill="#DE886D">
+      <rect x="3"  y="13" width="1" height="2"/>
+      <rect x="5"  y="13" width="1" height="2"/>
+      <rect x="9"  y="13" width="1" height="2"/>
+      <rect x="11" y="13" width="1" height="2"/>
+    </g>
+
+    <!-- 身体 -->
+    <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
+
+    <!-- 左臂 -->
+    <rect x="0" y="9" width="2" height="2" fill="#DE886D"/>
+    <!-- 右臂 -->
+    <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
+
+    <!-- 眼睛 -->
+    <g class="eyes" fill="#000">
+      <rect x="4"  y="8" width="1" height="2"/>
+      <rect x="10" y="8" width="1" height="2"/>
+    </g>
+
+    <!-- 嘴巴 -->
+    <rect x="6.4" y="10.8" width="2.2" height="1" rx=".5" fill="#7a2230"/>
+
+  </g>
+</svg>
+</div>
+
+<script>
+async function ready() {
+  try {
+    const { emit } = window.__TAURI__.event;
+    await emit('mascot-ready');
+  } catch(e) {}
+}
+ready();
+</script>
+</body>
+</html>

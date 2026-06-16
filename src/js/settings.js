@@ -14,14 +14,14 @@ const PROVIDERS = {
     name: 'Claude',
     desc: 'Anthropic',
     icon: '✦',
-    bg:   'linear-gradient(135deg,#6c8ef5,#a78bfa)',
+    bg:   'linear-gradient(135deg,var(--accent),var(--accent2))',
     key:  'claude_api_key',
   },
   deepseek: {
     name: 'DeepSeek',
     desc: 'DeepSeek AI',
     icon: 'D',
-    bg:   'linear-gradient(135deg,#2dd4bf,#60a5fa)',
+    bg:   'linear-gradient(135deg,#38bdf8,#60a5fa)',
     key:  'deepseek_api_key',
   },
   qwen: {
@@ -58,6 +58,8 @@ async function loadSettings() {
   /* 恢复 AI 评级开关（默认开启） */
   const toggle = document.getElementById('toggle-ai-rating');
   if (toggle) toggle.checked = cfg.ai_rating_enabled !== false;
+  /* 渲染主题色选择器 */
+  renderThemePicker('theme-picker-container');
 }
 
 /**

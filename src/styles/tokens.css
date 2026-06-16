@@ -1,9 +1,7 @@
 /* ── 设计 Token ──────────────────────────────────────────────────
- * 所有颜色、尺寸、圆角等设计变量都在此定义。
- * 修改视觉风格时只需调整此文件，其他组件通过 CSS 变量自动更新。
+ * Light Glassmorphism 设计系统
  * ──────────────────────────────────────────────────────────────── */
 
-/* 全局盒模型重置 */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -11,40 +9,57 @@
 }
 
 :root {
-  /* ── 背景层级 ── */
-  --bg: #f7f8fc;          /* 应用根背景 */
-  --surface: #fff;         /* 卡片/内容背景 */
-  --surface2: #f0f2f8;    /* 次要背景 */
-  --surface3: #e8ecf5;    /* 第三层背景 */
+  /* ── 页面背景 ── */
+  --bg: #f0f9ff;
 
-  /* ── 文字层级 ── */
-  --text: #2c2f42;         /* 主文字 */
-  --text2: #6b7280;        /* 次要文字 */
-  --text3: #b0b8cc;        /* 弱化文字 / 占位符 */
+  /* ── 玻璃表面（半透明白）── */
+  --surface:  rgba(255,255,255,0.60);
+  --surface2: rgba(255,255,255,0.45);
+  --surface3: rgba(255,255,255,0.30);
+
+  /* ── 文字（深蓝紫调，避免纯黑）── */
+  --text:  #1e1b4b;
+  --text2: rgba(30,27,75,0.50);
+  --text3: rgba(30,27,75,0.35);
 
   /* ── 边框 ── */
-  --border: rgba(100, 110, 160, 0.1);    /* 标准边框 */
-  --border2: rgba(100, 110, 160, 0.18);  /* 强调边框 */
+  --border:  rgba(255,255,255,0.80);    /* 玻璃容器外边框 */
+  --border2: rgba(30,27,75,0.08);       /* 内部分割线 */
 
   /* ── 主题色 ── */
-  --accent: #6c8ef5;
-  --accent-soft: #eef1fd;
+  --accent:      #0ea5e9;
+  --accent2:     #38bdf8;
+  --accent-dark: #0284c7;
+  --accent-rgb:  14,165,233;
+  --accent2-rgb: 56,189,248;
+  --accent-soft: rgba(14,165,233,0.10);
 
-  /* ── 语义色（成功 / 信息 / 警告 / 危险 / 紫色 / 青色） ── */
-  --green: #52c79b;   --green-soft: #edfaf4;
-  --blue: #60a5fa;    --blue-soft: #eff6ff;
-  --amber: #f9a825;   --amber-soft: #fffbeb;
-  --purple: #a78bfa;  --purple-soft: #f5f3ff;
-  --red: #f87171;     --red-soft: #fff1f1;
-  --teal: #2dd4bf;    --teal-soft: #f0fdfb;
+  /* ── 背景光晕（随主题变化）── */
+  --bg-gradient:
+    radial-gradient(ellipse 55% 45% at  8% 12%, rgba(14,165,233,0.40)  0%, transparent 70%),
+    radial-gradient(ellipse 50% 38% at 88%  8%, rgba(99,102,241,0.25)  0%, transparent 70%),
+    radial-gradient(ellipse 52% 40% at 85% 88%, rgba(56,189,248,0.28)  0%, transparent 70%),
+    radial-gradient(ellipse 48% 36% at 12% 85%, rgba(167,139,250,0.22) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 30% at 50% 48%, rgba(14,165,233,0.16)  0%, transparent 65%);
+
+  /* ── 语义色 ── */
+  --green:       #10b981; --green-soft:  rgba(16,185,129,0.12);
+  --blue:        #60a5fa; --blue-soft:   rgba(96,165,250,0.12);
+  --amber:       #f59e0b; --amber-soft:  rgba(245,158,11,0.12);
+  --purple:      #a78bfa; --purple-soft: rgba(167,139,250,0.12);
+  --red:         #f87171; --red-soft:    rgba(248,113,113,0.12);
+  --teal:        #38bdf8; --teal-soft:   rgba(45,212,191,0.12);
+
+  /* ── 分割线 ── */
+  --divider: rgba(30,27,75,0.07);
 
   /* ── 布局尺寸 ── */
-  --sidebar-w: 210px;
+  --sidebar-w:  210px;
   --titlebar-h: 52px;
 
   /* ── 圆角 ── */
-  --radius: 14px;
-  --radius-sm: 9px;
+  --radius:    18px;
+  --radius-sm: 11px;
 }
 
 /* ── 根元素：透明背景支持 macOS 阴影 ── */
@@ -57,13 +72,26 @@ html, body {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  font-family: -apple-system, 'SF Pro Display', 'Inter', BlinkMacSystemFont, sans-serif;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.01em;
 }
 
 * { scrollbar-width: none; -ms-overflow-style: none; }
 *::-webkit-scrollbar { display: none; }
 
+hr { border: none; border-top: 1px solid var(--divider); margin: 2rem 0; }
 
-hr { border: none; border-top: 0.5px solid var(--border); margin: 2rem 0 }
+/* 移动端降低 blur 性能压力 */
+@media (max-width: 768px) {
+  .sidebar,
+  .card, .stat, .row,
+  .mem-card, .cache-card, .settings-card, .settings-block,
+  .hook-card, .claudemd-card, .session-item,
+  .chart-wrap, .cache-eff-wrap, .usage-quota-card,
+  .confirm-box, .modal, .skill-modal {
+    backdrop-filter: blur(12px) saturate(1.5) !important;
+    -webkit-backdrop-filter: blur(12px) saturate(1.5) !important;
+  }
+}

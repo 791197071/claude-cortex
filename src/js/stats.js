@@ -32,7 +32,7 @@ function calcTotalCost(modelInputTotals, modelOutputTotals) {
  * 条形图颜色池，按模型在列表中的出现顺序循环使用
  */
 const MODEL_COLORS = [
-  '#6c8ef5', '#a78bfa', '#2dd4bf', '#52c79b', '#f9a825',
+  '#0ea5e9', '#a78bfa', '#38bdf8', '#10b981', '#f59e0b',
   '#f87171', '#60a5fa', '#fb923c', '#e879f9', '#34d399',
 ];
 

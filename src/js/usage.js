@@ -2,49 +2,90 @@
  * 通过 Rust 后端调用 Anthropic OAuth Usage API，展示：
  *  - 5小时窗口已用百分比 + 倒计时
  *  - 本周额度已用百分比 + 重置日期
- * 应用启动时自动请求一次；有 5 分钟内存缓存，期间不重复请求。
+ *
+ * 缓存策略：
+ *  - 成功响应持久化到 localStorage（TTL 10 分钟），重启不重复请求
+ *  - 收到 429 后退避 15 分钟，退避期内不触碰 API
+ *  - force=true 仍尊重 429 退避期；退避过后才强制刷新
  * 依赖：utils.js（invoke）、toast.js
  * ──────────────────────────────────────────────────────────────── */
 
-const USAGE_CACHE_TTL = 5 * 60 * 1000;
-let _usageCache    = null;   // { data, fetchedAt }
+const USAGE_CACHE_TTL    = 10 * 60 * 1000;   // 10 分钟
+const USAGE_429_BACKOFF  = 15 * 60 * 1000;   // 429 后退避 15 分钟
+const LS_CACHE_KEY       = 'cortex_usage_cache_v1';
+const LS_429_UNTIL_KEY   = 'cortex_usage_429_until';
+
 let _countdownTimer = null;
-let _fetching      = false;
+let _fetching       = false;
+
+function _readCache() {
+  try { return JSON.parse(localStorage.getItem(LS_CACHE_KEY)); } catch { return null; }
+}
+function _writeCache(data, fetchedAt) {
+  try { localStorage.setItem(LS_CACHE_KEY, JSON.stringify({ data, fetchedAt })); } catch {}
+}
+function _get429Until() {
+  return parseInt(localStorage.getItem(LS_429_UNTIL_KEY) || '0', 10);
+}
+function _set429Until(ts) {
+  try { localStorage.setItem(LS_429_UNTIL_KEY, String(ts)); } catch {}
+}
+function _clear429() {
+  try { localStorage.removeItem(LS_429_UNTIL_KEY); } catch {}
+}
 
 /**
- * 主入口：启动时和切换到统计页时调用。
- * - 有缓存且未过期 → 直接渲染，不请求网络
- * - 无缓存 → 显示加载状态后请求
- * - 有缓存但已过期 → 保持旧数据可见，静默后台刷新
+ * 主入口：启动时和切换到用量页时调用。
+ * - 有未过期缓存 → 直接渲染，不请求网络
+ * - 处于 429 退避期 → 渲染旧缓存（若有）或显示退避提示，不打 API
+ * - 否则 → 请求 API，成功后更新缓存
  */
 window.loadClaudeUsage = async function (force = false, silent = false) {
-  const now = Date.now();
+  const now   = Date.now();
+  const cache = _readCache();
 
-  // 缓存有效，直接渲染
-  if (!force && _usageCache && now - _usageCache.fetchedAt < USAGE_CACHE_TTL) {
-    _renderUsage(_usageCache.data, _usageCache.fetchedAt);
+  // 缓存有效，直接渲染（force 也不跳过；焦点刷新不应绕过缓存）
+  if (cache && now - cache.fetchedAt < USAGE_CACHE_TTL) {
+    _renderUsage(cache.data, cache.fetchedAt);
     return;
   }
 
-  // silent 模式（焦点刷新）：有旧数据时不显示转圈，直接后台更新
-  // force=true（手动重试）时始终显示加载状态，让用户看到反馈
-  if (!silent && (force || !_usageCache)) _showLoading(true);
+  // 处于 429 退避期：有旧缓存就展示旧数据，没有则提示
+  const until429 = _get429Until();
+  if (!force && until429 > now) {
+    if (cache) {
+      _renderUsage(cache.data, cache.fetchedAt);
+    } else {
+      const mins = Math.ceil((until429 - now) / 60_000);
+      _showError(`请求过于频繁，${mins} 分钟后自动重试`);
+    }
+    return;
+  }
 
-  // 防止并发重复请求
+  if (!silent && (!cache || force)) _showLoading(true);
+
   if (_fetching) return;
   _fetching = true;
 
   try {
-    const data = await invoke('get_claude_usage');
+    const data    = await invoke('get_claude_usage');
     const fetchedAt = Date.now();
-    // 只缓存成功响应；data.error 时不缓存，保证重试能正常显示加载状态
-    if (!data.error) {
-      _usageCache = { data, fetchedAt };
+
+    if (data.error && data.error.includes('过于频繁')) {
+      // 429：记录退避期，不清除旧缓存
+      _set429Until(now + USAGE_429_BACKOFF);
+      if (cache) {
+        _renderUsage(cache.data, cache.fetchedAt);
+      } else {
+        _renderUsage(data, fetchedAt);   // 会走 _showError 路径
+      }
+    } else {
+      _clear429();
+      if (!data.error) _writeCache(data, fetchedAt);
+      _renderUsage(data, fetchedAt);
     }
-    _renderUsage(data, fetchedAt);
   } catch (e) {
-    // 只在没有旧数据时才展示错误块
-    if (!_usageCache) _showError(String(e));
+    if (!cache) _showError(String(e));
   } finally {
     _fetching = false;
     _showLoading(false);

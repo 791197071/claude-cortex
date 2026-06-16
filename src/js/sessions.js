@@ -30,8 +30,8 @@ function sessionCost(s) {
  */
 function sessionCardHtml(s) {
   const projStyle = s.project
-    ? 'background:var(--purple-soft);color:#7c3aed;border:0.5px solid rgba(167,139,250,.2)'
-    : 'background:var(--teal-soft);color:#0d9488;border:0.5px solid rgba(45,212,191,.25)';
+    ? 'background:rgba(var(--accent-rgb),0.10);color:var(--accent);border:1px solid rgba(var(--accent-rgb),0.20)'
+    : 'background:rgba(var(--accent-rgb),0.12);color:var(--accent);border:1px solid rgba(var(--accent-rgb),0.22)';
   const cost = sessionCost(s);
   const costStr = cost > 0 ? `<div class="session-cost">≈ ${fmtCost(cost)}</div>` : '';
   return `

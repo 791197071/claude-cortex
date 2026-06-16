@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="/styles/tokens.css">
 <link rel="stylesheet" href="/styles/layout.css">
 <link rel="stylesheet" href="/styles/components.css">
+<script src="/js/theme.js"></script>
 </head>
 <body>
 <div id="app-root">
@@ -27,32 +28,54 @@
   </div>
   <div class="sidebar-nav">
     <div class="sidebar-group">
-      <button class="nav-item active" onclick="switchPage('stats',this)"><span class="nav-icon">📊</span>统计用量</button>
+      <button class="nav-item active" onclick="switchPage('stats',this)"><span class="nav-icon"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="8" width="3" height="5" rx=".5"/><rect x="5.5" y="5" width="3" height="8" rx=".5"/><rect x="10" y="2" width="3" height="11" rx=".5"/></svg></span>统计用量</button>
     </div>
     <div class="sidebar-group">
       <div class="sidebar-group-label">技能</div>
-      <button class="nav-item" onclick="switchPage('skills',this)"><span class="nav-icon">⚡</span>技能<span class="nav-badge" id="nav-badge-skills">-</span></button>
+      <button class="nav-item" onclick="switchPage('skills',this)"><span class="nav-icon"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 1.5 3.5 7.5h4L5.5 12.5l5.5-6h-4z"/></svg></span>技能<span class="nav-badge" id="nav-badge-skills">-</span></button>
     </div>
     <div class="sidebar-group">
       <div class="sidebar-group-label">扩展</div>
-      <button class="nav-item" onclick="switchPage('plugins',this)"><span class="nav-icon">🧩</span>插件<span class="nav-badge" id="nav-badge-plugins">-</span></button>
+      <button class="nav-item" onclick="switchPage('plugins',this)"><span class="nav-icon"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="8" y="1.5" width="4.5" height="4.5" rx="1"/><rect x="1.5" y="8" width="4.5" height="4.5" rx="1"/><rect x="8" y="8" width="4.5" height="4.5" rx="1"/></svg></span>插件<span class="nav-badge" id="nav-badge-plugins">-</span></button>
     </div>
     <div class="sidebar-group">
       <div class="sidebar-group-label">数据</div>
-      <button class="nav-item" onclick="switchPage('memory',this)"><span class="nav-icon">💾</span>规则记忆<span class="nav-badge" id="nav-badge-memory">-</span></button>
-      <button class="nav-item" onclick="switchPage('sessions',this)"><span class="nav-icon">💬</span>会话历史</button>
+      <button class="nav-item" onclick="switchPage('memory',this)"><span class="nav-icon"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 10 7 12.5 12.5 10M1.5 7 7 9.5 12.5 7M1.5 4 7 1.5 12.5 4 7 6.5z"/></svg></span>规则记忆<span class="nav-badge" id="nav-badge-memory">-</span></button>
+      <button class="nav-item" onclick="switchPage('sessions',this)"><span class="nav-icon"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 2.5h11v7.5H9.5L7 12.5v-2.5H1.5z"/><path d="M4 5.5h6M4 7.5h4"/></svg></span>会话历史</button>
     </div>
     <div class="sidebar-group">
       <div class="sidebar-group-label">系统</div>
-      <button class="nav-item" onclick="switchPage('cache',this)"><span class="nav-icon">🗑️</span>缓存<span class="nav-badge" id="nav-badge-cache" style="font-size:10px"></span></button>
-      <button class="nav-item" onclick="switchPage('settings',this)"><span class="nav-icon">⚙️</span>设置</button>
+      <button class="nav-item" onclick="switchPage('cache',this)"><span class="nav-icon"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="7" cy="4" rx="4.5" ry="1.8"/><path d="M2.5 4v6c0 1 2 1.8 4.5 1.8S11.5 11 11.5 10V4"/><path d="M2.5 7c0 1 2 1.8 4.5 1.8S11.5 8 11.5 7"/></svg></span>缓存<span class="nav-badge" id="nav-badge-cache" style="font-size:10px"></span></button>
+      <button class="nav-item" onclick="switchPage('settings',this)"><span class="nav-icon"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1.5 4.5h11"/><circle cx="9.5" cy="4.5" r="1.8"/><path d="M1.5 9.5h11"/><circle cx="4.5" cy="9.5" r="1.8"/></svg></span>设置</button>
     </div>
   </div>
 </aside>
 
 <!-- ── 主内容区 ── -->
 <div class="main-content">
-<div class="main-topbar" data-tauri-drag-region></div>
+<div class="main-topbar" data-tauri-drag-region>
+  <!-- Clawd 像素螃蟹，pointer-events:none 保证拖动不受影响 -->
+  <svg class="topbar-mascot" width="51" height="36" viewBox="-1 4 17 12"
+       xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+    <rect class="tm-shadow" x="3" y="15" width="9" height="1" fill="#000" opacity=".45"/>
+    <g class="tm-body">
+      <g fill="#DE886D">
+        <rect x="3"  y="13" width="1" height="2"/>
+        <rect x="5"  y="13" width="1" height="2"/>
+        <rect x="9"  y="13" width="1" height="2"/>
+        <rect x="11" y="13" width="1" height="2"/>
+      </g>
+      <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
+      <rect x="0" y="9" width="2"  height="2" fill="#DE886D"/>
+      <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
+      <g class="tm-eyes" fill="#000">
+        <rect x="4"  y="8" width="1" height="2"/>
+        <rect x="10" y="8" width="1" height="2"/>
+      </g>
+      <rect x="6.4" y="10.8" width="2.2" height="1" rx=".5" fill="#7a2230"/>
+    </g>
+  </svg>
+</div>
 
 <!-- ══ 技能 ══ -->
 <div class="page" id="page-skills">
@@ -159,7 +182,7 @@
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 1v8M4 6l3 3 3-3M2 10v1a1 1 0 001 1h8a1 1 0 001-1v-1"/></svg>
           导出会话
         </button>
-        <button class="btn btn-primary" style="gap:6px;background:var(--purple-soft);color:#7c3aed;border-color:rgba(167,139,250,0.3);padding:8px 16px;font-size:13px" onclick="openSummaryModal()">
+        <button class="btn btn-primary" style="gap:6px;background:rgba(167,139,250,0.12);color:var(--accent);border-color:rgba(var(--accent-rgb),0.22);padding:8px 16px;font-size:13px;box-shadow:none" onclick="openSummaryModal()">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h10M2 7h7M2 10h5"/></svg>
           一键总结
         </button>
@@ -177,7 +200,7 @@
   <div class="section" style="margin-bottom:0">
     <div class="section-header">
       <span id="usage-plan-name" class="section-label"></span>
-      <span id="usage-plan-badge" style="display:none;font-size:10px;font-weight:600;padding:1px 8px;border-radius:20px;background:var(--accent-soft);color:var(--accent);border:0.5px solid rgba(108,142,245,.25)"></span>
+      <span id="usage-plan-badge" style="display:none;font-size:10px;font-weight:600;padding:1px 8px;border-radius:20px;background:var(--accent-soft);color:var(--accent);border:1px solid rgba(var(--accent-rgb),0.20)"></span>
     </div>
 
     <!-- 错误 -->
@@ -325,7 +348,7 @@
 
 <!-- ══ 设置 ══ -->
 <div class="page" id="page-settings" style="position:relative">
-  <button class="btn btn-ghost" onclick="resetAllKeys()" style="position:absolute;top:0;right:0;font-size:12px;color:var(--danger);border-color:rgba(255,69,58,0.25);padding:6px 14px">
+  <button class="btn btn-ghost" onclick="resetAllKeys()" style="position:absolute;top:0;right:0;font-size:12px;color:#ef4444;border-color:rgba(248,113,113,0.25);padding:6px 14px">
     <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px"><path d="M2 7a5 5 0 1 1 1.4 3.5"/><path d="M2 11V7h4"/></svg>
     重置所有 API Key
   </button>
@@ -333,13 +356,13 @@
     <div class="section-header"><span class="section-label">选择模型</span></div>
     <div style="display:flex;gap:10px;margin-bottom:24px">
       <div class="settings-provider-card" id="provider-card-claude" onclick="selectProvider('claude')">
-        <div class="settings-provider-icon" style="background:linear-gradient(135deg,#6c8ef5,#a78bfa);margin-bottom:10px">✦</div>
+        <div class="settings-provider-icon" style="background:linear-gradient(135deg,var(--accent),var(--accent2));margin-bottom:10px">✦</div>
         <div style="font-size:13px;font-weight:600;color:var(--text)">Claude</div>
         <div style="font-size:10px;color:var(--text3);margin-top:2px">Anthropic</div>
         <div class="settings-active-dot" id="provider-dot-claude"></div>
       </div>
       <div class="settings-provider-card" id="provider-card-deepseek" onclick="selectProvider('deepseek')">
-        <div class="settings-provider-icon" style="background:linear-gradient(135deg,#2dd4bf,#60a5fa);margin-bottom:10px">D</div>
+        <div class="settings-provider-icon" style="background:linear-gradient(135deg,#38bdf8,#60a5fa);margin-bottom:10px">D</div>
         <div style="font-size:13px;font-weight:600;color:var(--text)">DeepSeek</div>
         <div style="font-size:10px;color:var(--text3);margin-top:2px">DeepSeek AI</div>
         <div class="settings-active-dot" id="provider-dot-deepseek"></div>
@@ -355,7 +378,7 @@
     <div class="section-header"><span class="section-label">配置 API Key</span></div>
     <div class="settings-card">
       <div class="settings-provider" style="margin-bottom:10px">
-        <div id="settings-active-icon" class="settings-provider-icon" style="background:linear-gradient(135deg,#6c8ef5,#a78bfa)">✦</div>
+        <div id="settings-active-icon" class="settings-provider-icon" style="background:linear-gradient(135deg,var(--accent),var(--accent2))">✦</div>
         <div class="settings-provider-info">
           <div id="settings-active-name" class="settings-provider-name">Claude</div>
           <div id="settings-active-desc" class="settings-provider-desc">sk-ant-api03-… 格式</div>
@@ -369,6 +392,14 @@
         </button>
         <button class="btn btn-primary" style="padding:8px 22px;font-size:13px;flex-shrink:0" onclick="saveApiKey()">保存</button>
       </div>
+    </div>
+  </div>
+
+  <div class="section" style="margin-top:0">
+    <div class="section-header"><span class="section-label">主题色</span></div>
+    <div class="settings-card">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">选择应用的主题配色，立即生效并自动记忆</div>
+      <div id="theme-picker-container" class="theme-picker"></div>
     </div>
   </div>
 
@@ -488,7 +519,7 @@
       </div>
       <div class="skill-detail-section" id="sd-content-section" style="display:none">
         <div class="skill-detail-label">技能内容</div>
-        <textarea id="sd-content" style="width:100%;min-height:220px;resize:vertical;font-size:12px;font-family:'SF Mono',Menlo,monospace;line-height:1.65;color:var(--text);background:var(--surface2);border:0.5px solid var(--border2);border-radius:10px;padding:12px 14px;outline:none;transition:border-color .18s" spellcheck="false"></textarea>
+        <textarea id="sd-content" style="width:100%;min-height:220px;resize:vertical;font-size:12px;font-family:'SF Mono',Menlo,monospace;line-height:1.65;color:var(--text);background:rgba(255,255,255,0.65);border:1px solid rgba(var(--accent-rgb),0.12);border-radius:12px;padding:12px 14px;outline:none;transition:border-color .18s,box-shadow .18s;backdrop-filter:blur(8px)" spellcheck="false"></textarea>
       </div>
     </div>
     <div class="skill-modal-footer">
@@ -517,11 +548,11 @@
   <div class="modal" style="width:400px">
     <div class="modal-head">
       <div style="display:flex;align-items:center;gap:10px">
-        <div style="width:30px;height:30px;border-radius:9px;background:var(--accent-soft);border:0.5px solid rgba(108,142,245,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <div style="width:30px;height:30px;border-radius:9px;background:rgba(var(--accent-rgb),0.10);border:1px solid rgba(var(--accent-rgb),0.20);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 1v8M4 6l3 3 3-3M2 10v1a1 1 0 001 1h8a1 1 0 001-1v-1"/></svg>
         </div>
         <div>
-          <div style="font-size:14px;font-weight:600;color:var(--text)">导出会话历史</div>
+          <div style="font-size:14px;font-weight:700;color:var(--text)">导出会话历史</div>
           <div style="font-size:11px;color:var(--text3);margin-top:1px">文件将保存到下载文件夹</div>
         </div>
       </div>
@@ -575,7 +606,7 @@
           </label>
         </div>
       </div>
-      <div id="export-hint" style="font-size:12px;color:var(--text3);background:var(--surface2);padding:8px 12px;border-radius:8px;border:0.5px solid var(--border)"></div>
+      <div id="export-hint" style="font-size:12px;color:var(--text3);background:rgba(255,255,255,0.50);padding:8px 12px;border-radius:9px;border:1px solid rgba(30,27,75,0.07)"></div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost"   onclick="closeExportModal()">取消</button>
@@ -592,11 +623,11 @@
   <div class="modal" id="summary-modal-inner" style="width:560px;max-height:88vh;display:flex;flex-direction:column">
     <div class="modal-head">
       <div style="display:flex;align-items:center;gap:10px">
-        <div style="width:30px;height:30px;border-radius:9px;background:var(--purple-soft);border:0.5px solid rgba(167,139,250,0.25);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#7c3aed" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h10M2 7h7M2 10h5"/></svg>
+        <div style="width:30px;height:30px;border-radius:9px;background:rgba(167,139,250,0.12);border:1px solid rgba(167,139,250,0.25);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h10M2 7h7M2 10h5"/></svg>
         </div>
         <div>
-          <div style="font-size:14px;font-weight:600;color:var(--text)">一键总结</div>
+          <div style="font-size:14px;font-weight:700;color:var(--text)">一键总结</div>
           <div style="font-size:11px;color:var(--text3);margin-top:1px">根据会话历史生成工作总结</div>
         </div>
       </div>
@@ -636,7 +667,7 @@
               <svg id="summary-prompt-expand-icon" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5V1h4M9 1h4v4M13 9v4H9M5 13H1V9"/></svg>
             </button>
           </div>
-          <textarea id="summary-prompt" rows="5" style="width:100%;padding:11px 13px;border:0.5px solid var(--border2);border-radius:8px;background:var(--surface2);color:var(--text);font-size:13px;font-family:inherit;line-height:1.7;resize:none;outline:none;box-sizing:border-box;transition:border-color .18s" placeholder="例如：请用中文生成一份工作周报，重点突出完成的功能和遇到的问题…" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor=''"></textarea>
+          <textarea id="summary-prompt" rows="5" style="width:100%;padding:11px 13px;border:1px solid rgba(var(--accent-rgb),0.12);border-radius:11px;background:rgba(255,255,255,0.65);color:var(--text);font-size:13px;font-family:inherit;line-height:1.7;resize:none;outline:none;box-sizing:border-box;transition:border-color .18s,box-shadow .18s;backdrop-filter:blur(8px)" placeholder="例如：请用中文生成一份工作周报，重点突出完成的功能和遇到的问题…" onfocus="this.style.borderColor='var(--accent)';this.style.boxShadow='0 0 0 3px rgba(var(--accent-rgb),0.10)'" onblur="this.style.borderColor='';this.style.boxShadow=''"></textarea>
         </div>
         <!-- 生成中遮罩 -->
         <div id="summary-loading-mask" style="display:none;position:absolute;inset:0;border-radius:10px;background:rgba(255,255,255,0.75);backdrop-filter:blur(3px);align-items:center;justify-content:center;flex-direction:column;gap:10px">
@@ -656,7 +687,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeSummaryModal()">关闭</button>
-      <button class="btn" id="summary-generate-btn" style="gap:6px;background:var(--purple-soft);color:#7c3aed;border-color:rgba(167,139,250,0.3)" onclick="doSummary()">
+      <button class="btn btn-primary" id="summary-generate-btn" style="gap:6px" onclick="doSummary()">
         <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h10M2 7h7M2 10h5"/></svg>
         生成总结
       </button>
@@ -669,11 +700,11 @@
   <div class="modal" style="width:620px;max-height:88vh">
     <div class="modal-head">
       <div style="display:flex;align-items:center;gap:10px;flex:1">
-        <div style="width:30px;height:30px;border-radius:9px;background:var(--green-soft);border:0.5px solid rgba(52,199,123,0.25);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#2a9d74" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h10M2 7h7M2 10h5"/></svg>
+        <div style="width:30px;height:30px;border-radius:9px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.22);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#059669" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h10M2 7h7M2 10h5"/></svg>
         </div>
         <div>
-          <div style="font-size:14px;font-weight:600;color:var(--text)">总结结果</div>
+          <div style="font-size:14px;font-weight:700;color:var(--text)">总结结果</div>
           <div style="font-size:11px;color:var(--text3);margin-top:1px">可直接复制使用</div>
         </div>
       </div>
@@ -681,7 +712,7 @@
     </div>
     <div class="modal-body" style="padding:20px 22px">
       <div style="position:relative">
-        <textarea id="summary-result-text" style="width:100%;height:360px;padding:13px 14px;border:0.5px solid var(--border2);border-radius:10px;background:var(--surface2);color:var(--text);font-size:13px;font-family:inherit;line-height:1.75;resize:vertical;outline:none;box-sizing:border-box" readonly></textarea>
+        <textarea id="summary-result-text" style="width:100%;height:360px;padding:13px 14px;border:1px solid rgba(var(--accent-rgb),0.12);border-radius:12px;background:rgba(255,255,255,0.65);color:var(--text);font-size:13px;font-family:inherit;line-height:1.75;resize:vertical;outline:none;box-sizing:border-box;backdrop-filter:blur(8px)" readonly></textarea>
         <div id="summary-stamp" style="display:none"></div>
       </div>
     </div>

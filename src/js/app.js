@@ -49,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (now - _lastFocusRefresh < 60_000) return;
     _lastFocusRefresh = now;
     loadStats();
-    loadClaudeUsage(true, true);
+    loadClaudeUsage(false, true);
   }
 
   window.addEventListener('focus', _onFocus);
@@ -60,4 +60,6 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Tauri 原生窗口焦点事件（比 web focus 更可靠） */
   const { listen } = window.__TAURI__?.event ?? {};
   if (listen) listen('tauri://focus', _onFocus);
+
 });
+

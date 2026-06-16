@@ -403,7 +403,7 @@ window.doSummary = async function () {
  */
 const RATING_STYLES = {
   '夯':     { ink:'#f59e0b', shadow:`0 0 14px #fde68a,0 0 32px #fbbf24,0 0 64px #f59e0bbb,0 0 100px #d9770677,5px 4px 0 #92400e55`, glowVar:'#fbbf24' },
-  '顶级':   { ink:'#a78bfa', shadow:`0 0 14px #c4b5fd,0 0 32px #a78bfa,0 0 64px #7c3aedaa,0 0 100px #5b21b666,4px 4px 0 #4c1d9544`, glowVar:'#a78bfa' },
+  '顶级':   { ink:'#a78bfa', shadow:`0 0 14px #c4b5fd,0 0 32px #a78bfa,0 0 64px #0ea5e988,0 0 100px #5b21b666,4px 4px 0 #4c1d9544`, glowVar:'#a78bfa' },
   'NPC':    { ink:'#9ca3af', shadow:`2px 2px 0 #1f2937,3px 3px 0 #111827,-1px -1px 0 #6b7280aa,0 0 6px #9ca3af33`, glowVar:'#9ca3af' },
   '拉':     { ink:'#f43f5e', shadow:`0 0 14px #fda4af,0 0 32px #f43f5e,0 0 64px #e11d48bb,0 0 100px #be123c77,5px 4px 0 #9f123444`, glowVar:'#f43f5e' },
   '拉完了': { ink:'#71717a', shadow:`4px 4px 0 #09090b,2px 2px 0 #18181b,0 0 4px #52525b66,-2px -2px 0 #3f3f4688,0 0 18px #71717a33`, glowVar:'#52525b' },
@@ -473,7 +473,12 @@ async function rateSummary(text, provider, apiKey, tokens = 0) {
 function burstParticles(grade) {
   const palettes = {
     '夯':   ['#fbbf24','#f59e0b','#10b981','#6ee7b7','#fff','#fde68a','#ef4444','#f97316'],
-    '顶级': ['#6c8ef5','#a78bfa','#60a5fa','#fff','#c4b5fd','#2dd4bf','#e879f9'],
+    '顶级': [
+      getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0ea5e9',
+      '#a78bfa','#fff','#c4b5fd',
+      getComputedStyle(document.documentElement).getPropertyValue('--accent2').trim() || '#38bdf8',
+      '#e879f9',
+    ],
   };
   const palette = palettes[grade];
   if (!palette) return;

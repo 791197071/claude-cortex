@@ -36,7 +36,7 @@ const PLUGIN_DESC_CACHE_KEY = n => `cortex_plugin_desc_v1_${n}`;
  */
 function getPluginIcon(name) {
   const initial = (name || '?')[0].toUpperCase();
-  const colors = ['#6c8ef5', '#52c79b', '#f9a825', '#a78bfa', '#2dd4bf'];
+  const colors = ['#0ea5e9', '#10b981', '#f59e0b', '#a78bfa', '#38bdf8'];
   const color = colors[name.split('').reduce((a, c) => a + c.charCodeAt(0), 0) % colors.length];
   return `<div style="width:40px;height:40px;border-radius:11px;background:${color};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;font-weight:700;color:#fff;font-family:-apple-system,sans-serif">${initial}</div>`;
 }

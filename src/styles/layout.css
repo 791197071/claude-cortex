@@ -1,32 +1,35 @@
 /* ── 应用布局 ──────────────────────────────────────────────────
- * 定义 app-root（外层 flex 容器）、侧边栏卡片、主内容区域的结构布局。
- * 不包含具体组件样式，只负责「骨架」。
+ * Light Glassmorphism 布局骨架
  * ──────────────────────────────────────────────────────────────── */
 
-/* 应用根容器：水平 flex，包含侧边栏 + 主内容 */
+/* 应用根容器：水平 flex + 5 个背景光晕色块 */
 #app-root {
   display: flex;
   height: 100vh;
   padding: 8px;
   gap: 8px;
-  background: var(--bg);
   border-radius: 12px;
   overflow: hidden;
+  position: relative;
+  background: var(--bg-gradient), var(--bg);
 }
 
-/* display:contents 让 app-layout 不生成盒模型，子元素直接参与外层 flex */
-.app-layout { display: contents }
+.app-layout { display: contents; }
 
-/* ── 侧边栏卡片 ── */
+/* ── 侧边栏（玻璃卡片）── */
 .sidebar {
   width: var(--sidebar-w);
   flex-shrink: 0;
-  background: var(--surface);
-  border-radius: 10px;
-  border: 0.5px solid var(--border2);
+  background: rgba(255,255,255,0.65);
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,0.88);
+  backdrop-filter: blur(52px) saturate(2.0);
+  -webkit-backdrop-filter: blur(52px) saturate(2.0);
+  box-shadow: 0 4px 32px rgba(var(--accent-rgb),0.08), inset 0 1px 0 rgba(255,255,255,0.90);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
 
 /* 侧边栏顶部：窗口控制按钮 + Logo，同时作为 Tauri 拖拽区 */
@@ -35,7 +38,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 0.5px solid var(--border);
+  border-bottom: 1px solid rgba(30,27,75,0.06);
 }
 
 .sidebar-logo-group {
@@ -44,12 +47,12 @@
   gap: 8px;
 }
 
-/* Logo 图标：渐变圆角方块 */
+/* Logo 图标：紫色渐变方块 */
 .logo-mark {
   width: 24px;
   height: 24px;
   border-radius: 7px;
-  background: linear-gradient(135deg, #6c8ef5, #a78bfa);
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -57,17 +60,23 @@
   font-weight: 700;
   color: #fff;
   flex-shrink: 0;
+  box-shadow: 0 3px 10px rgba(var(--accent-rgb),0.30);
 }
 
+/* Logo 文字：渐变色标题 */
 .logo-text {
   font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -.03em;
+  font-weight: 800;
+  letter-spacing: -0.03em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
   min-width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 /* 侧边栏导航区域：可滚动 */
@@ -80,16 +89,16 @@
 /* 侧边栏底部：刷新按钮 */
 .sidebar-bottom {
   padding: 10px 10px 12px;
-  border-top: 0.5px solid var(--border);
+  border-top: 1px solid rgba(30,27,75,0.06);
 }
 
 .refresh-btn {
   width: 100%;
   height: 30px;
   padding: 0 12px;
-  border: 0.5px solid var(--border2);
-  border-radius: 8px;
-  background: transparent;
+  border: 1px solid rgba(255,255,255,0.70);
+  border-radius: 9px;
+  background: rgba(255,255,255,0.40);
   color: var(--text2);
   font-size: 12px;
   cursor: pointer;
@@ -98,11 +107,12 @@
   justify-content: center;
   gap: 5px;
   transition: all .18s;
+  font-family: inherit;
 }
-.refresh-btn:hover { background: var(--surface2); color: var(--text) }
+.refresh-btn:hover { background: rgba(255,255,255,0.70); color: var(--text); }
 
 /* ── 导航分组与菜单项 ── */
-.sidebar-group { margin-bottom: 20px }
+.sidebar-group { margin-bottom: 20px; }
 
 .sidebar-group-label {
   font-size: 10px;
@@ -119,7 +129,7 @@
   align-items: center;
   gap: 9px;
   padding: 7px 10px;
-  border-radius: 9px;
+  border-radius: 10px;
   cursor: pointer;
   transition: all .15s;
   color: var(--text2);
@@ -129,23 +139,25 @@
   background: transparent;
   width: 100%;
   text-align: left;
+  font-family: inherit;
 }
-.nav-item:hover { background: var(--surface2); color: var(--text) }
-.nav-item.active { background: var(--accent-soft); color: var(--accent) }
+.nav-item:hover { background: rgba(255,255,255,0.55); color: var(--text); }
+.nav-item.active { background: rgba(var(--accent-rgb),0.10); color: var(--accent); font-weight: 600; }
 
-.nav-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0 }
+.nav-icon { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; opacity: .72; }
+.nav-item.active .nav-icon { opacity: 1; }
 
-/* 菜单项右侧徽标（显示数量） */
+/* 菜单项右侧徽标 */
 .nav-badge {
   margin-left: auto;
   font-size: 10px;
   font-weight: 600;
   padding: 1px 6px;
   border-radius: 10px;
-  background: var(--surface3);
+  background: rgba(30,27,75,0.07);
   color: var(--text3);
 }
-.nav-item.active .nav-badge { background: rgba(108,142,245,.15); color: var(--accent) }
+.nav-item.active .nav-badge { background: rgba(var(--accent-rgb),0.15); color: var(--accent); }
 
 /* ── 主内容区 ── */
 .main-content {
@@ -156,17 +168,16 @@
   height: 100%;
 }
 
-/* 顶部粘性拖拽区：无边框窗口通过此区域拖动整个窗口 */
+/* 顶部粘性拖拽区：透明，仅作为 Tauri 拖拽热区 */
 .main-topbar {
   height: 48px;
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--bg);
+  background: transparent;
   flex-shrink: 0;
 }
 
 /* ── 页面切换系统 ── */
-/* 默认所有 .page 隐藏；路由切换时给目标页加 .active */
-.page { display: none }
-.page.active { display: block }
+.page { display: none; }
+.page.active { display: block; }
