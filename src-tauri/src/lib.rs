@@ -1185,7 +1185,7 @@ fn collect_rule_files(base: &Path, dir: &Path, result: &mut Vec<RuleFile>) {
             let size = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
             let id = rel
                 .to_string_lossy()
-                .replace('/', "__")
+                .replace(['/', '\\'], "__")
                 .replace('.', "_");
             result.push(RuleFile {
                 id,
