@@ -3,17 +3,15 @@
  *  - 5小时窗口已用百分比 + 倒计时
  *  - 本周额度已用百分比 + 重置日期
  *
- * 缓存策略：
- *  - 成功响应持久化到 localStorage（TTL 10 分钟），重启不重复请求
- *  - 收到 429 后退避 15 分钟，退避期内不触碰 API
- *  - force=true 仍尊重 429 退避期；退避过后才强制刷新
+ * 缓存策略（重要）：
+ *  - 真正的缓存与 429 退避都在 Rust 后端（get_claude_usage 内），
+ *    菜单栏弹框与本页共用同一份，保证两边数字与刷新一致。
+ *  - 本页的 localStorage 仅用于「打开瞬间即时渲染」与「重启后首屏兜底」，
+ *    不再做 TTL 闸门，每次都会向后端要一次（后端 TTL 内会秒回缓存）。
  * 依赖：utils.js（invoke）、toast.js
  * ──────────────────────────────────────────────────────────────── */
 
-const USAGE_CACHE_TTL    = 10 * 60 * 1000;   // 10 分钟
-const USAGE_429_BACKOFF  = 15 * 60 * 1000;   // 429 后退避 15 分钟
-const LS_CACHE_KEY       = 'cortex_usage_cache_v1';
-const LS_429_UNTIL_KEY   = 'cortex_usage_429_until';
+const LS_CACHE_KEY  = 'cortex_usage_cache_v1';
 
 let _countdownTimer = null;
 let _fetching       = false;
@@ -24,64 +22,34 @@ function _readCache() {
 function _writeCache(data, fetchedAt) {
   try { localStorage.setItem(LS_CACHE_KEY, JSON.stringify({ data, fetchedAt })); } catch {}
 }
-function _get429Until() {
-  return parseInt(localStorage.getItem(LS_429_UNTIL_KEY) || '0', 10);
-}
-function _set429Until(ts) {
-  try { localStorage.setItem(LS_429_UNTIL_KEY, String(ts)); } catch {}
-}
-function _clear429() {
-  try { localStorage.removeItem(LS_429_UNTIL_KEY); } catch {}
-}
 
 /**
  * 主入口：启动时和切换到用量页时调用。
- * - 有未过期缓存 → 直接渲染，不请求网络
- * - 处于 429 退避期 → 渲染旧缓存（若有）或显示退避提示，不打 API
- * - 否则 → 请求 API，成功后更新缓存
+ * 先用本地旧值即时渲染（避免空白/闪烁），再向后端取统一数据。
+ * 后端负责 TTL 缓存与 429 退避，所以这里无条件请求即可。
  */
 window.loadClaudeUsage = async function (force = false, silent = false) {
-  const now   = Date.now();
   const cache = _readCache();
 
-  // 缓存有效，直接渲染（force 也不跳过；焦点刷新不应绕过缓存）
-  if (cache && now - cache.fetchedAt < USAGE_CACHE_TTL) {
+  // 即时渲染上次的值，等后端返回再覆盖
+  if (cache && cache.data) {
     _renderUsage(cache.data, cache.fetchedAt);
-    return;
+  } else if (!silent) {
+    _showLoading(true);
   }
-
-  // 处于 429 退避期：有旧缓存就展示旧数据，没有则提示
-  const until429 = _get429Until();
-  if (!force && until429 > now) {
-    if (cache) {
-      _renderUsage(cache.data, cache.fetchedAt);
-    } else {
-      const mins = Math.ceil((until429 - now) / 60_000);
-      _showError(`请求过于频繁，${mins} 分钟后自动重试`);
-    }
-    return;
-  }
-
-  if (!silent && (!cache || force)) _showLoading(true);
 
   if (_fetching) return;
   _fetching = true;
 
   try {
-    const data    = await invoke('get_claude_usage');
+    const data      = await invoke('get_claude_usage', { force });
     const fetchedAt = Date.now();
 
-    if (data.error && data.error.includes('过于频繁')) {
-      // 429：记录退避期，不清除旧缓存
-      _set429Until(now + USAGE_429_BACKOFF);
-      if (cache) {
-        _renderUsage(cache.data, cache.fetchedAt);
-      } else {
-        _renderUsage(data, fetchedAt);   // 会走 _showError 路径
-      }
+    if (data.error) {
+      // 后端无可用数据时才报错；本地有旧值则保留旧渲染，不闪成错误
+      if (!(cache && cache.data)) _renderUsage(data, fetchedAt);
     } else {
-      _clear429();
-      if (!data.error) _writeCache(data, fetchedAt);
+      _writeCache(data, fetchedAt);
       _renderUsage(data, fetchedAt);
     }
   } catch (e) {
@@ -214,10 +182,19 @@ function _tickCountdown(elId, targetMs) {
   el.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} 后重置`;
 }
 
+/* 与菜单栏弹框、桌面卡片统一：绿/琥珀/红渐变，阈值 50 / 80 */
 function _pctColor(pct) {
-  if (pct == null) return 'var(--accent)';
-  if (pct >= 90)   return 'var(--red)';
-  if (pct >= 70)   return 'var(--amber)';
-  return 'var(--accent)';
+  if (pct == null) return 'linear-gradient(90deg,#34c759,#30d158)';
+  if (pct >= 80)   return 'linear-gradient(90deg,#ff3b30,#ff6961)';
+  if (pct >= 50)   return 'linear-gradient(90deg,#ff9f0a,#ffcc02)';
+  return 'linear-gradient(90deg,#34c759,#30d158)';
 }
+
+/* 实时同步：监听后台轮询的广播，与弹框、桌面卡片渲染同一份数据 */
+window.__TAURI__?.event?.listen('usage-updated', (e) => {
+  const data = e.payload;
+  if (!data) return;
+  if (!data.error) _writeCache(data, Date.now());
+  _renderUsage(data, Date.now());
+});
 

@@ -76,6 +76,14 @@ body {
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   letter-spacing: -0.01em;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* 输入框 / 文本域 / 可编辑区仍可选中编辑 */
+input, textarea, [contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 * { scrollbar-width: none; -ms-overflow-style: none; }

@@ -1,3 +1,6 @@
+# Generated indexes
+.codegraph/
+
 # Logs
 logs
 *.log

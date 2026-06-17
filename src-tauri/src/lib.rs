@@ -3,6 +3,12 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use tauri::{
+    tray::{MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+};
 
 fn home_dir() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
@@ -107,7 +113,7 @@ pub struct Stats {
     pub total_cache_write: u64,
 }
 
-#[derive(Serialize, Deserialize, Default)]
+#[derive(Serialize, Deserialize, Default, Clone)]
 pub struct ClaudeUsage {
     pub plan: String,
     pub subscription_type: String,
@@ -1269,9 +1275,65 @@ fn clear_cache(path: String) -> Result<(), String> {
 
 // ── Claude Pro 用量 ──
 
+// 后端统一用量缓存：菜单栏弹框与主程序用量页都走这里，保证两边数字一致、刷新统一。
+#[derive(Default)]
+struct UsageCache {
+    data: Option<ClaudeUsage>,
+    fetched_at: Option<std::time::Instant>,
+    backoff_until: Option<std::time::Instant>,
+}
+
+fn usage_cache() -> &'static std::sync::Mutex<UsageCache> {
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<UsageCache>> = std::sync::OnceLock::new();
+    CACHE.get_or_init(|| std::sync::Mutex::new(UsageCache::default()))
+}
+
+const USAGE_BACKOFF: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+// 后台轮询间隔：唯一的拉取源，每隔这么久刷新一次缓存并广播给三处窗口。
+const USAGE_REFRESH_SECS: u64 = 30;
+
+// 唯一的「拉取 + 写缓存」入口（阻塞）。后台轮询和 force 刷新都走它，保证全程只有一份数据。
+// 尊重 429 退避；其它错误时保留旧缓存（不把三处界面闪成错误）。
+fn fetch_and_cache() -> ClaudeUsage {
+    // 退避期：不打 API，直接给缓存
+    {
+        let c = usage_cache().lock().unwrap();
+        if c.backoff_until.map_or(false, |b| b > std::time::Instant::now()) {
+            if let Some(d) = &c.data {
+                return d.clone();
+            }
+        }
+    }
+
+    let fresh = get_claude_usage_blocking();
+
+    let mut c = usage_cache().lock().unwrap();
+    let now = std::time::Instant::now();
+    match &fresh.error {
+        Some(e) if e.contains("过于频繁") => {
+            c.backoff_until = Some(now + USAGE_BACKOFF);
+            c.data.clone().unwrap_or(fresh)
+        }
+        Some(_) => c.data.clone().unwrap_or(fresh), // 网络/token 错误：有旧值就留着
+        None => {
+            c.data = Some(fresh.clone());
+            c.fetched_at = Some(now);
+            c.backoff_until = None;
+            fresh
+        }
+    }
+}
+
+// 命令只负责「初次渲染」：有缓存直接返回（后台轮询保持其新鲜）；force 或冷启动才主动拉一次。
 #[tauri::command]
-async fn get_claude_usage() -> ClaudeUsage {
-    tauri::async_runtime::spawn_blocking(get_claude_usage_blocking)
+async fn get_claude_usage(force: Option<bool>) -> ClaudeUsage {
+    if !force.unwrap_or(false) {
+        let c = usage_cache().lock().unwrap();
+        if let Some(d) = &c.data {
+            return d.clone();
+        }
+    }
+    tauri::async_runtime::spawn_blocking(fetch_and_cache)
         .await
         .unwrap_or_else(|_| ClaudeUsage {
             error: Some("执行失败，请重试".to_string()),
@@ -1385,12 +1447,435 @@ fn get_claude_usage_blocking() -> ClaudeUsage {
     }
 }
 
+// ── Tray popup commands ──
+
+#[tauri::command]
+fn show_main_window(app: tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        // macOS: 命令可能运行在后台线程，用 run_on_main_thread 确保 AppKit 调用安全
+        #[cfg(target_os = "macos")]
+        {
+            let _ = app.run_on_main_thread(move || {
+                use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+                use objc2::runtime::{AnyClass, AnyObject};
+                use objc2::msg_send;
+                if let Ok(handle) = w.window_handle() {
+                    if let RawWindowHandle::AppKit(h) = handle.as_raw() {
+                        let ns_view = h.ns_view.as_ptr() as *mut AnyObject;
+                        unsafe {
+                            let ns_win: *mut AnyObject = msg_send![ns_view, window];
+                            if !ns_win.is_null() {
+                                if let Some(cls) = AnyClass::get(c"NSApplication") {
+                                    let ns_app: *mut AnyObject = msg_send![cls, sharedApplication];
+                                    let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
+                                }
+                                let _: () = msg_send![ns_win, makeKeyAndOrderFront: std::ptr::null_mut::<AnyObject>()];
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = w.set_focus();
+    }
+}
+
+#[tauri::command]
+fn hide_tray_popup(app: tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("tray-popup") {
+        let _ = w.hide();
+    }
+}
+
+// 读 ~/.claude/cortex-config.json 里的布尔配置项
+fn read_config_bool(key: &str, default: bool) -> bool {
+    let path = claude_dir().join("cortex-config.json");
+    fs::read_to_string(&path)
+        .ok()
+        .and_then(|c| serde_json::from_str::<serde_json::Value>(&c).ok())
+        .and_then(|j| j[key].as_bool())
+        .unwrap_or(default)
+}
+fn read_widget_enabled() -> bool {
+    read_config_bool("desktop_widget_enabled", false)
+}
+fn read_widget_on_top() -> bool {
+    read_config_bool("widget_on_top", false)
+}
+
+// 桌面卡片的 NSWindow(已转 NSPanel)指针，供运行时切换层级
+#[cfg(target_os = "macos")]
+static WIDGET_NS_WIN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+// 按「是否置顶/全屏之上」套用窗口层级与 Space 行为。必须在主线程调用。
+#[cfg(target_os = "macos")]
+fn apply_widget_layer(on_top: bool) {
+    let addr = WIDGET_NS_WIN.load(Ordering::Relaxed);
+    if addr == 0 {
+        return;
+    }
+    use objc2::msg_send;
+    use objc2::runtime::AnyObject;
+    let ns_win = addr as *mut AnyObject;
+    unsafe {
+        if on_top {
+            // 置顶 + 全屏之上：popUpMenu 级 + canJoinAllSpaces(1)|fullScreenAuxiliary(256)=257
+            let _: () = msg_send![ns_win, setLevel: 101i64];
+            let _: () = msg_send![ns_win, setCollectionBehavior: 257usize];
+            let vis: bool = msg_send![ns_win, isVisible];
+            if vis {
+                let _: () = msg_send![ns_win, orderFrontRegardless];
+            }
+        } else {
+            // 普通：默认层级 + 默认 Space 行为(0)。
+            // 关键：不能用 canJoinAllSpaces，否则卡片会强行钻进别的 App 全屏空间、仍浮在上面。
+            let _: () = msg_send![ns_win, setLevel: 0i64];
+            let _: () = msg_send![ns_win, setCollectionBehavior: 0usize];
+            // 主动排到最底，离开「最前」位置，恢复「会被前台窗口遮挡」
+            let vis: bool = msg_send![ns_win, isVisible];
+            if vis {
+                let _: () = msg_send![ns_win, orderBack: std::ptr::null_mut::<AnyObject>()];
+            }
+        }
+    }
+}
+
+#[tauri::command]
+fn set_desktop_widget(app: tauri::AppHandle, enabled: bool) {
+    if let Some(w) = app.get_webview_window("desktop-widget") {
+        if enabled {
+            let _ = w.show();
+            #[cfg(target_os = "macos")]
+            {
+                let on_top = read_widget_on_top();
+                let _ = app.run_on_main_thread(move || apply_widget_layer(on_top));
+            }
+        } else {
+            let _ = w.hide();
+        }
+    }
+}
+
+#[tauri::command]
+fn set_widget_on_top(app: tauri::AppHandle, enabled: bool) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app.run_on_main_thread(move || apply_widget_layer(enabled));
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        if let Some(w) = app.get_webview_window("desktop-widget") {
+            let _ = w.set_always_on_top(enabled);
+        }
+    }
+}
+
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 // ── Run ──
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            // --- 系统托盘图标 ---
+            let icon_bytes = include_bytes!("../icons/tray-mascot.png");
+            let icon = tauri::image::Image::from_bytes(icon_bytes)
+                .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+
+            // --- 透明 popup 窗口 ---
+            let popup = WebviewWindowBuilder::new(
+                app,
+                "tray-popup",
+                WebviewUrl::App("popup.html".into()),
+            )
+            .title("")
+            .decorations(false)
+            .transparent(true)
+            .visible(false)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .resizable(false)
+            .shadow(false)
+            .inner_size(300.0, 222.0)
+            .build()?;
+
+            // macOS: build() 后同步拿 NSWindow 指针并存储
+            // with_webview 是异步的（排队到下一帧），不能用于 show 前的设置
+            let popup_ns_win = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            #[cfg(target_os = "macos")]
+            {
+                use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+                use objc2::runtime::{AnyClass, AnyObject};
+                use objc2::msg_send;
+
+                // libobjc 的 object_setClass：把已存在的 NSWindow 实例「降格」成 NSPanel。
+                // NSPanel 是 NSWindow 的子类、内存布局完全一致，运行时换 isa 是安全且成熟的做法
+                // （tauri-nspanel 内部同理）。这是关键：只有 NSPanel 才认 NonactivatingPanel
+                // 样式位，而「非激活面板」是唯一能稳定浮在*别的 App 原生全屏空间*之上的窗口类型。
+                extern "C" {
+                    fn object_setClass(obj: *mut AnyObject, cls: *const AnyClass) -> *const AnyClass;
+                }
+
+                if let Ok(handle) = popup.window_handle() {
+                    if let RawWindowHandle::AppKit(h) = handle.as_raw() {
+                        let ns_view = h.ns_view.as_ptr() as *mut AnyObject;
+                        unsafe {
+                            let ns_win: *mut AnyObject = msg_send![ns_view, window];
+                            if !ns_win.is_null() {
+                                popup_ns_win.store(ns_win as usize, Ordering::Relaxed);
+
+                                // ① 换成 NSPanel —— 浮在别的 App 全屏之上的前提
+                                if let Some(panel_cls) = AnyClass::get(c"NSPanel") {
+                                    let _ = object_setClass(ns_win, panel_cls as *const AnyClass);
+                                }
+                                // ② NonactivatingPanel(1<<7=128)：弹出时不抢焦点、不把用户踢出全屏
+                                let mask: usize = msg_send![ns_win, styleMask];
+                                let _: () = msg_send![ns_win, setStyleMask: mask | 128usize];
+                                // ③ 后台（别的 App 在前台/全屏）时也不自动隐藏
+                                //    —— NSPanel 默认 hidesOnDeactivate=true，不关掉它就永远弹不出来
+                                let _: () = msg_send![ns_win, setHidesOnDeactivate: false];
+                                let _: () = msg_send![ns_win, setBecomesKeyOnlyIfNeeded: true];
+                                let _: () = msg_send![ns_win, setFloatingPanel: true];
+
+                                // canJoinAllSpaces(1) | fullScreenAuxiliary(256) = 257
+                                let _: () = msg_send![ns_win, setCollectionBehavior: 257usize];
+                                // NSPopUpMenuWindowLevel = 101，高于全屏内容层
+                                let _: () = msg_send![ns_win, setLevel: 101i64];
+
+                                // 首次注册到 Space 系统：alpha=0 闪显一次
+                                let _: () = msg_send![ns_win, setAlphaValue: 0.0f64];
+                                let _: () = msg_send![ns_win, orderFrontRegardless];
+                                let _: () = msg_send![ns_win, orderOut: std::ptr::null_mut::<AnyObject>()];
+                                let _: () = msg_send![ns_win, setAlphaValue: 1.0f64];
+                                eprintln!("[cortex] popup promoted to non-activating NSPanel");
+                            }
+                        }
+                    }
+                }
+            }
+            // --- 点击弹框以外任意位置 → 自动隐藏弹框 ---
+            // 弹框是 non-activating 面板、不抢焦点，blur/resignKey 不可靠，用 NSEvent 监听鼠标按下：
+            //   · 全局监听：点别的 App / 全屏内容 / 桌面（事件发给其它 App）→ 隐藏。
+            //   · 本地监听：点本应用主窗口（事件发给自己）→ 隐藏。
+            // 本地监听只在「点的是主窗口」时隐藏：
+            //   - 排除「点弹框自身」→ 弹框里的按钮照常可用；
+            //   - 排除「点托盘图标」→ 否则会和托盘的显示/隐藏开关打架（点托盘关闭会被秒重开）。
+            // 只监听鼠标、不监听键盘 → 无需「输入监控」权限。
+            #[cfg(target_os = "macos")]
+            {
+                use block2::RcBlock;
+                use objc2::runtime::{AnyClass, AnyObject};
+                use objc2::msg_send;
+                use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+                let popup_addr = popup_ns_win.load(Ordering::Relaxed);
+
+                // 主窗口 NSWindow 指针，供本地监听判定「点的是不是主窗口」
+                let main_addr = app
+                    .get_webview_window("main")
+                    .and_then(|w| {
+                        w.window_handle().ok().and_then(|h| {
+                            if let RawWindowHandle::AppKit(a) = h.as_raw() {
+                                let ns_view = a.ns_view.as_ptr() as *mut AnyObject;
+                                let ns_win: *mut AnyObject = unsafe { msg_send![ns_view, window] };
+                                if ns_win.is_null() { None } else { Some(ns_win as usize) }
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                    .unwrap_or(0);
+
+                let nsevent_cls = AnyClass::get(c"NSEvent");
+                // NSEventMaskLeftMouseDown(1<<1) | RightMouseDown(1<<3) = 10
+                const MOUSE_DOWN_MASK: u64 = 10;
+
+                // 全局：点其它 App / 全屏内容 / 桌面 → 隐藏
+                if popup_addr != 0 {
+                    if let Some(cls) = nsevent_cls {
+                        let g = RcBlock::new(move |_e: *mut AnyObject| {
+                            let popup = popup_addr as *mut AnyObject;
+                            unsafe {
+                                let visible: bool = msg_send![popup, isVisible];
+                                if visible {
+                                    let _: () = msg_send![popup, orderOut: std::ptr::null_mut::<AnyObject>()];
+                                }
+                            }
+                        });
+                        unsafe {
+                            let _: *mut AnyObject = msg_send![
+                                cls, addGlobalMonitorForEventsMatchingMask: MOUSE_DOWN_MASK, handler: &*g];
+                        }
+                    }
+                }
+
+                // 本地：点主窗口 → 隐藏；点弹框 / 托盘 → 保留（不返回 nil，点击照常生效）
+                if popup_addr != 0 && main_addr != 0 {
+                    if let Some(cls) = nsevent_cls {
+                        let l = RcBlock::new(move |event: *mut AnyObject| -> *mut AnyObject {
+                            let popup = popup_addr as *mut AnyObject;
+                            unsafe {
+                                let visible: bool = msg_send![popup, isVisible];
+                                if visible {
+                                    let ewin: *mut AnyObject = msg_send![event, window];
+                                    if ewin as usize == main_addr {
+                                        let _: () = msg_send![popup, orderOut: std::ptr::null_mut::<AnyObject>()];
+                                    }
+                                }
+                            }
+                            event
+                        });
+                        unsafe {
+                            let _: *mut AnyObject = msg_send![
+                                cls, addLocalMonitorForEventsMatchingMask: MOUSE_DOWN_MASK, handler: &*l];
+                        }
+                    }
+                }
+            }
+
+            // --- 桌面常驻用量卡片 (desktop widget) ---
+            // 贴在桌面层、可拖动、位置记忆、每分钟刷新；用量走后端共享缓存，与菜单栏/主程序一致。
+            let widget = WebviewWindowBuilder::new(
+                app,
+                "desktop-widget",
+                WebviewUrl::App("widget.html".into()),
+            )
+            .title("")
+            .decorations(false)
+            .transparent(true)
+            .visible(false)
+            .skip_taskbar(true)
+            .resizable(false)
+            .shadow(false)
+            .inner_size(252.0, 150.0)
+            .build()?;
+
+            // macOS: 转成 non-activating NSPanel + 整窗可拖动，并存指针供运行时切换层级。
+            // 为什么必须是 NSPanel：只有非激活面板能在「置顶/全屏之上」模式可靠浮到别的 App 全屏空间
+            // 上方（与菜单栏弹框同款，见上方 popup 处的说明）；普通 NSWindow 做不到。
+            // 桌面层(kCGDesktopWindowLevel)被系统当背景、不收鼠标事件，所以也不能用那一层。
+            #[cfg(target_os = "macos")]
+            {
+                use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+                use objc2::runtime::{AnyClass, AnyObject};
+                use objc2::msg_send;
+                extern "C" {
+                    fn object_setClass(obj: *mut AnyObject, cls: *const AnyClass) -> *const AnyClass;
+                }
+                if let Ok(handle) = widget.window_handle() {
+                    if let RawWindowHandle::AppKit(h) = handle.as_raw() {
+                        let ns_view = h.ns_view.as_ptr() as *mut AnyObject;
+                        unsafe {
+                            let ns_win: *mut AnyObject = msg_send![ns_view, window];
+                            if !ns_win.is_null() {
+                                if let Some(panel_cls) = AnyClass::get(c"NSPanel") {
+                                    let _ = object_setClass(ns_win, panel_cls as *const AnyClass);
+                                }
+                                let mask: usize = msg_send![ns_win, styleMask];
+                                let _: () = msg_send![ns_win, setStyleMask: mask | 128usize]; // NonactivatingPanel
+                                let _: () = msg_send![ns_win, setHidesOnDeactivate: false];
+                                let _: () = msg_send![ns_win, setBecomesKeyOnlyIfNeeded: true];
+                                // 整窗背景可拖动：点卡片任意处都能拖
+                                let _: () = msg_send![ns_win, setMovableByWindowBackground: true];
+                                WIDGET_NS_WIN.store(ns_win as usize, Ordering::Relaxed);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 启动：按配置显示，并套用「是否置顶/全屏之上」的层级
+            if read_widget_enabled() {
+                let _ = widget.show();
+            }
+            #[cfg(target_os = "macos")]
+            apply_widget_layer(read_widget_on_top());
+
+            let popup_ns_win_tray = popup_ns_win.clone();
+
+            // --- Tray 图标（无原生菜单，点击显示/隐藏 popup）---
+            let _tray = TrayIconBuilder::new()
+                .icon(icon)
+                .icon_as_template(false)
+                .tooltip("Claude Cortex")
+                .on_tray_icon_event(move |tray, event| {
+                    if let TrayIconEvent::Click {
+                        button_state: MouseButtonState::Up,
+                        position,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(popup) = app.get_webview_window("tray-popup") {
+                            #[cfg(target_os = "macos")]
+                            {
+                                use objc2::runtime::AnyObject;
+                                use objc2::msg_send;
+                                let addr = popup_ns_win_tray.load(Ordering::SeqCst);
+                                if addr != 0 {
+                                    let ns_win = addr as *mut AnyObject;
+                                    unsafe {
+                                        let is_visible: bool = msg_send![ns_win, isVisible];
+                                        if is_visible {
+                                            let _ = popup.hide();
+                                        } else {
+                                            let scale = popup.scale_factor().unwrap_or(1.0);
+                                            let lx = (position.x / scale - 150.0).max(8.0);
+                                            let _ = popup.set_position(tauri::LogicalPosition::new(lx, 28.0));
+                                            let _: () = msg_send![ns_win, setCollectionBehavior: 257usize];
+                                            let _: () = msg_send![ns_win, setLevel: 101i64];
+                                            let _: () = msg_send![ns_win, orderFrontRegardless];
+                                        }
+                                    }
+                                }
+                            }
+                            #[cfg(not(target_os = "macos"))]
+                            {
+                                if popup.is_visible().unwrap_or(false) {
+                                    let _ = popup.hide();
+                                } else {
+                                    let _ = popup.show();
+                                    let _ = popup.set_focus();
+                                }
+                            }
+                        }
+                    }
+                })
+                .build(app)?;
+
+            // --- 主窗口关闭 → 隐藏而非退出 ---
+            if let Some(window) = app.get_webview_window("main") {
+                let w = window.clone();
+                window.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = w.hide();
+                    }
+                });
+            }
+
+            // --- 用量后台轮询：唯一拉取源 → 刷新缓存 → 广播给三处窗口 ---
+            // 三处（主程序用量页 / 菜单栏弹框 / 桌面卡片）都只渲染这里推送的同一份数据，
+            // 所以数值与精度始终一致；窗口自身不再各自定时拉取。每 30s 一次请求，开销可忽略。
+            {
+                use tauri::Emitter;
+                let app_handle = app.handle().clone();
+                std::thread::spawn(move || loop {
+                    let usage = fetch_and_cache();
+                    let _ = app_handle.emit("usage-updated", usage);
+                    std::thread::sleep(std::time::Duration::from_secs(USAGE_REFRESH_SECS));
+                });
+            }
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             list_skills,
             delete_skill,
@@ -1414,7 +1899,45 @@ pub fn run() {
             list_claude_mds,
             list_rules,
             get_claude_usage,
+            show_main_window,
+            hide_tray_popup,
+            set_desktop_widget,
+            set_widget_on_top,
+            quit_app,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // macOS: Dock 图标点击 → 主窗口隐藏时重新显示
+            if let tauri::RunEvent::Reopen { has_visible_windows, .. } = event {
+                if !has_visible_windows {
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.show();
+                        #[cfg(target_os = "macos")]
+                        {
+                            let _ = app.run_on_main_thread(move || {
+                                use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+                                use objc2::runtime::{AnyClass, AnyObject};
+                                use objc2::msg_send;
+                                if let Ok(handle) = w.window_handle() {
+                                    if let RawWindowHandle::AppKit(h) = handle.as_raw() {
+                                        let ns_view = h.ns_view.as_ptr() as *mut AnyObject;
+                                        unsafe {
+                                            let ns_win: *mut AnyObject = msg_send![ns_view, window];
+                                            if !ns_win.is_null() {
+                                                if let Some(cls) = AnyClass::get(c"NSApplication") {
+                                                    let ns_app: *mut AnyObject = msg_send![cls, sharedApplication];
+                                                    let _: () = msg_send![ns_app, activateIgnoringOtherApps: true];
+                                                }
+                                                let _: () = msg_send![ns_win, makeKeyAndOrderFront: std::ptr::null_mut::<AnyObject>()];
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+            }
+        });
 }

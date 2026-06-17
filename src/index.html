@@ -55,7 +55,7 @@
 <div class="main-content">
 <div class="main-topbar" data-tauri-drag-region>
   <!-- Clawd 像素螃蟹，pointer-events:none 保证拖动不受影响 -->
-  <svg class="topbar-mascot" width="51" height="36" viewBox="-1 4 17 12"
+  <svg class="topbar-mascot" width="66" height="36" viewBox="-1 4 22 12"
        xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
     <rect class="tm-shadow" x="3" y="15" width="9" height="1" fill="#000" opacity=".45"/>
     <g class="tm-body">
@@ -63,8 +63,8 @@
         <rect x="3"  y="13" width="1" height="2"/>
         <rect x="5"  y="13" width="1" height="2"/>
         <rect x="9"  y="13" width="1" height="2"/>
-        <rect x="11" y="13" width="1" height="2"/>
       </g>
+      <rect class="tm-kickleg" x="11" y="13" width="1" height="2" fill="#DE886D"/>
       <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
       <rect x="0" y="9" width="2"  height="2" fill="#DE886D"/>
       <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
@@ -73,6 +73,17 @@
         <rect x="10" y="8" width="1" height="2"/>
       </g>
       <rect x="6.4" y="10.8" width="2.2" height="1" rx=".5" fill="#7a2230"/>
+    </g>
+    <g class="tm-ball" shape-rendering="geometricPrecision">
+      <circle cx="14" cy="14.4" r="1.2" fill="#fff" stroke="#1c1c1e" stroke-width="0.32"/>
+      <path d="M14 13.85 L14.52 14.23 L14.32 14.85 L13.68 14.85 L13.48 14.23 Z" fill="#1c1c1e"/>
+      <g stroke="#1c1c1e" stroke-width="0.16" stroke-linecap="round">
+        <line x1="14" y1="13.85" x2="14" y2="13.22"/>
+        <line x1="14.52" y1="14.23" x2="15.05" y2="14.04"/>
+        <line x1="14.32" y1="14.85" x2="14.66" y2="15.31"/>
+        <line x1="13.68" y1="14.85" x2="13.34" y2="15.31"/>
+        <line x1="13.48" y1="14.23" x2="12.95" y2="14.04"/>
+      </g>
     </g>
   </svg>
 </div>
@@ -413,6 +424,30 @@
         </div>
         <label class="toggle" title="开启/关闭 AI 评级">
           <input type="checkbox" id="toggle-ai-rating" onchange="saveRatingToggle(this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+    <div class="settings-card">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px">桌面用量卡片</div>
+          <div style="font-size:11.5px;color:var(--text3);line-height:1.5">在桌面常驻一张用量卡片，可拖动定位、每分钟刷新，数据与菜单栏一致</div>
+        </div>
+        <label class="toggle" title="开启/关闭 桌面用量卡片">
+          <input type="checkbox" id="toggle-desktop-widget" onchange="saveDesktopWidgetToggle(this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+    <div class="settings-card">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px">卡片悬浮置顶</div>
+          <div style="font-size:11.5px;color:var(--text3);line-height:1.5">开启后卡片浮在所有窗口之上、其他软件全屏时也显示；关闭则为普通窗口、会被前台窗口遮挡</div>
+        </div>
+        <label class="toggle" title="开启/关闭 卡片悬浮置顶">
+          <input type="checkbox" id="toggle-widget-on-top" onchange="saveWidgetOnTopToggle(this.checked)">
           <span class="toggle-slider"></span>
         </label>
       </div>

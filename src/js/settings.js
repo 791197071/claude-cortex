@@ -58,6 +58,12 @@ async function loadSettings() {
   /* 恢复 AI 评级开关（默认开启） */
   const toggle = document.getElementById('toggle-ai-rating');
   if (toggle) toggle.checked = cfg.ai_rating_enabled !== false;
+  /* 恢复 桌面用量卡片开关（默认关闭） */
+  const wt = document.getElementById('toggle-desktop-widget');
+  if (wt) wt.checked = cfg.desktop_widget_enabled === true;
+  /* 恢复 卡片悬浮置顶开关（默认关闭） */
+  const wtop = document.getElementById('toggle-widget-on-top');
+  if (wtop) wtop.checked = cfg.widget_on_top === true;
   /* 渲染主题色选择器 */
   renderThemePicker('theme-picker-container');
 }
@@ -219,6 +225,38 @@ window.saveRatingToggle = async function (enabled) {
   window._settingsCfg = cfg;
   await invoke('write_file', { path, content: JSON.stringify(cfg, null, 2) }).catch(() => {});
   toast(enabled ? 'AI 评级已开启' : 'AI 评级已关闭', 'success');
+};
+
+/**
+ * 保存「桌面用量卡片」开关，并即时显示/隐藏桌面卡片窗口
+ * @param {boolean} enabled
+ */
+window.saveDesktopWidgetToggle = async function (enabled) {
+  const path = await getConfigPath();
+  const raw  = await invoke('read_file', { path }).catch(() => null);
+  let cfg = {};
+  try { cfg = raw ? JSON.parse(raw) : {}; } catch (_) {}
+  cfg.desktop_widget_enabled = enabled;
+  window._settingsCfg = cfg;
+  await invoke('write_file', { path, content: JSON.stringify(cfg, null, 2) }).catch(() => {});
+  await invoke('set_desktop_widget', { enabled }).catch(() => {});
+  toast(enabled ? '桌面用量卡片已开启' : '桌面用量卡片已关闭', 'success');
+};
+
+/**
+ * 保存「卡片悬浮置顶」开关，并即时套用层级（含全屏之上）
+ * @param {boolean} enabled
+ */
+window.saveWidgetOnTopToggle = async function (enabled) {
+  const path = await getConfigPath();
+  const raw  = await invoke('read_file', { path }).catch(() => null);
+  let cfg = {};
+  try { cfg = raw ? JSON.parse(raw) : {}; } catch (_) {}
+  cfg.widget_on_top = enabled;
+  window._settingsCfg = cfg;
+  await invoke('write_file', { path, content: JSON.stringify(cfg, null, 2) }).catch(() => {});
+  await invoke('set_widget_on_top', { enabled }).catch(() => {});
+  toast(enabled ? '卡片已置顶（全屏之上可见）' : '卡片已取消置顶', 'success');
 };
 
 /**
