@@ -20,7 +20,13 @@ body {
   padding: 8px;
 }
 
-/* 整张卡片可拖动；不透明纯色，无阴影/磨砂，背后不再透出壁纸 */
+/* 整窗任意处可拖动：让卡片及其所有子元素都不接收鼠标事件，点击一律穿透到
+   带 data-tauri-drag-region 的 <body> 触发系统拖动，从根本上消除
+   "进度条/文字/图标等区域拖不动、卡顿"的问题。本卡片为纯展示、无可点击控件，
+   禁用指针事件不影响任何功能。 */
+.card, .card * { pointer-events: none; }
+
+/* 不透明纯色，无阴影/磨砂，背后不再透出壁纸 */
 .card {
   background: #f6f6f8;
   border: 0.5px solid rgba(0,0,0,0.08);
@@ -101,9 +107,9 @@ body {
 }
 </style>
 </head>
-<body>
-<div class="card" data-tauri-drag-region>
-  <div class="header" data-tauri-drag-region>
+<body data-tauri-drag-region>
+<div class="card">
+  <div class="header">
     <svg class="mascot" viewBox="-1 4 22 12" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
       <rect class="tm-shadow" x="3" y="15" width="9" height="1" fill="#000" opacity=".3"/>
       <g class="tm-body">
@@ -137,7 +143,7 @@ body {
     <span class="plan-name" id="plan-name">加载中…</span>
     <div class="status-dot" id="status-dot"></div>
   </div>
-  <div id="content" data-tauri-drag-region><div class="msg">正在获取用量…</div></div>
+  <div id="content"><div class="msg">正在获取用量…</div></div>
 </div>
 
 <script>
@@ -179,8 +185,8 @@ function quotaHtml(label, pct, resetsAt) {
   _lastW[label] = w;
   const c    = p != null ? cls(p) : '';
   const pStr = p != null ? p + '%' : '--';
-  return `<div class="quota" data-tauri-drag-region>
-    <div class="quota-row" data-tauri-drag-region>
+  return `<div class="quota">
+    <div class="quota-row">
       <span class="quota-label">${label}</span>
       <span class="quota-right">
         <span class="quota-countdown">${countdown(resetsAt)}</span>
@@ -201,7 +207,7 @@ function render(u) {
   if (u.error) {
     planEl.textContent = u.plan || '获取失败';
     dot.style.background = '#ff3b30';
-    content.innerHTML = `<div class="msg err" data-tauri-drag-region>${u.error}</div>`;
+    content.innerHTML = `<div class="msg err">${u.error}</div>`;
     return;
   }
 
@@ -213,7 +219,7 @@ function render(u) {
     html += quotaHtml('5 小时额度', u.five_hour_pct, u.five_hour_resets_at);
   if (u.seven_day_pct != null || u.seven_day_resets_at)
     html += quotaHtml('7 天额度', u.seven_day_pct, u.seven_day_resets_at);
-  if (!html) html = '<div class="msg" data-tauri-drag-region>暂无额度数据</div>';
+  if (!html) html = '<div class="msg">暂无额度数据</div>';
   content.innerHTML = html;
 
   requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -227,7 +233,7 @@ async function load() {
   try { render(await invoke('get_claude_usage', { force: false })); }
   catch (e) {
     document.getElementById('plan-name').textContent = '出错';
-    document.getElementById('content').innerHTML = `<div class="msg err" data-tauri-drag-region>${e}</div>`;
+    document.getElementById('content').innerHTML = `<div class="msg err">${e}</div>`;
   }
 }
 

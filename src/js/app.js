@@ -20,6 +20,7 @@ async function initApp() {
     loadCache(),
     loadSettings(),
     loadClaudeUsage(),
+    loadMcp(),
   ]);
 }
 
